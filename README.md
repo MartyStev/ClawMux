@@ -1,6 +1,11 @@
 # ClawMux — AI Router for OpenClaw
 
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/martystev/ClawMux/actions/workflows/ci.yml/badge.svg)](https://github.com/martystev/ClawMux/actions/workflows/ci.yml)
+
 ClawMux is a lightweight multi-user control plane that routes Mattermost chat traffic to per-user OpenClaw instances over persistent WebSocket connections.
+
+This repository includes open-source readiness files such as `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, and GitHub issue/PR templates.
 
 It is designed as an isolation-first solution for organizations that need strict multi-user separation across OpenClaw workspaces. It solves the operational gap between chat systems and isolated OpenClaw workspaces by providing:
 
@@ -42,6 +47,17 @@ ClawMux is built specifically for OpenClaw integration and supports OpenClaw gat
 - maintains user mappings for OpenClaw identities in PostgreSQL
 
 This makes ClawMux an ideal companion for OpenClaw deployments where each user has a dedicated OpenClaw workspace.
+
+## Multi-User Isolation
+
+ClawMux is built for teams that need strict separation between users and their OpenClaw workspaces. Each message is routed only to the instance assigned to the user, and proactive replies are delivered only to the user's known Mattermost channel.
+
+Key isolation guarantees:
+
+- one OpenClaw instance per user mapping
+- no shared chat state between users
+- no direct user access to OpenClaw instances through the router
+- Mattermost traffic flows through a single authorized bot channel
 
 ## Architecture
 
@@ -90,7 +106,7 @@ curl -X POST http://localhost:8060/api/v1/trigger \
   -d '{
     "external_user_id": "user-ext-123",
     "provider": "mattermost",
-    "text": "Сделай краткий отчёт по продажам"
+    "text": "Generate a short sales report"
   }'
 ```
 
@@ -105,7 +121,7 @@ curl -X POST http://localhost:8060/api/v1/notify \
   -d '{
     "external_user_id": "user-ext-123",
     "provider": "mattermost",
-    "text": "Напоминание: встреча через 10 минут"
+    "text": "Reminder: meeting in 10 minutes"
   }'
 ```
 
@@ -119,6 +135,15 @@ See [docs/control-plane-api.md](docs/control-plane-api.md) for full request and 
 - no hardcoded secrets in repository templates
 - optional Dify fallback only activates when configured
 
+## Open Source Readiness
+
+- `LICENSE` for open-source distribution
+- `CONTRIBUTING.md` for contribution guidance
+- `SECURITY.md` for responsible disclosure
+- `CODE_OF_CONDUCT.md` for community expectations
+- GitHub issue and pull request templates for contributors
+- GitHub Actions CI for automated testing on push and PRs
+
 ## Quick Start
 
 ### 1. Clone and configure
@@ -131,24 +156,50 @@ cp .env.example .env
 
 Edit `.env` with your Mattermost URL, tokens, database URL, and optional Dify settings.
 
-### 2. Run with Docker Compose
+Use `requirements.lock` for deterministic installs when you want a reproducible environment.
+
+### 2. Docker quick start
 
 ```bash
 docker compose up -d --build
 ```
 
-### 3. Check health
+Wait for the service to start and verify health:
 
 ```bash
 curl http://localhost:8060/health
 ```
+
+### 3. Local Python quick start
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.lock
+alembic upgrade head
+python -m src.main
+```
+
+Then check health:
+
+```bash
+curl http://localhost:8060/health
+```
+
+## Deployment docs
+
+For more deployment options and production guidance, see [docs/deployment.md](docs/deployment.md).
+
+## Architecture docs
+
+For architecture details and component flow, see [docs/architecture.md](docs/architecture.md).
 
 ## Development
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.lock
 alembic upgrade head
 python -m src.main
 ```
@@ -189,8 +240,11 @@ This creates or updates:
 
 ## Documentation
 
-- [Control Plane API](docs/control-plane-api.md)
-- [docs/control-plane-api.md](docs/control-plane-api.md)
+- [Control Plane API](docs/control-plane-api.md)- [Deployment guide](docs/deployment.md)
+- [Architecture guide](docs/architecture.md)- `requirements.lock` for deterministic installs
+- `LICENSE` for open-source distribution
+- `CONTRIBUTING.md` for contribution guidelines
+- `SECURITY.md` for responsible disclosure
 
 ## Roadmap
 

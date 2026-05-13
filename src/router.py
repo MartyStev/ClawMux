@@ -148,21 +148,21 @@ class Router:
 
         # Select a random status phrase to show while generating
         thinking_phrases = [
-            "💭 Думаю...",
-            "✍️ Пишу ответ...",
-            "🧠 Размышляю...",
-            "🔍 Изучаю запрос...",
-            "⚙️ Обрабатываю...",
-            "⏳ Секундочку...",
-            "🤓 Вспоминаю...",
-            "📚 Ищу информацию...",
-            "✨ Творю магию...",
-            "📝 Формулирую мысль...",
-            "🤖 Шестеренки крутятся...",
-            "💡 Собираю идеи...",
-            "🧩 Складываю пазл...",
-            "🚀 Готовлю ответ...",
-            "🧐 Анализирую...",
+            "💭 Thinking...",
+            "✍️ Writing an answer...",
+            "🧠 Processing...",
+            "🔍 Reviewing the request...",
+            "⚙️ Working...",
+            "⏳ One moment...",
+            "🤓 Remembering...",
+            "📚 Looking for information...",
+            "✨ Creating a response...",
+            "📝 Formulating a reply...",
+            "🤖 Gears are turning...",
+            "💡 Gathering ideas...",
+            "🧩 Putting the pieces together...",
+            "🚀 Preparing the answer...",
+            "🧐 Analyzing...",
         ]
         placeholder_text = random.choice(thinking_phrases)
         placeholder_id = ""
@@ -280,14 +280,14 @@ class Router:
         identity_key = self._identity_key(event.provider, event.user_id)
 
         thinking_phrases = [
-            "💭 Думаю...",
-            "✍️ Пишу ответ...",
-            "🧠 Размышляю...",
-            "🔍 Изучаю запрос...",
-            "⚙️ Обрабатываю...",
-            "⏳ Секундочку...",
-            "📚 Ищу информацию...",
-            "🚀 Готовлю ответ...",
+            "💭 Thinking...",
+            "✍️ Writing an answer...",
+            "🧠 Processing...",
+            "🔍 Reviewing the request...",
+            "⚙️ Working...",
+            "⏳ One moment...",
+            "📚 Looking for information...",
+            "🚀 Preparing the answer...",
         ]
         placeholder_text = random.choice(thinking_phrases)
         placeholder_id = ""
