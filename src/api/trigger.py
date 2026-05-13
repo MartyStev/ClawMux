@@ -77,9 +77,10 @@ async def trigger(
     mapping = request.app.state.mapping
 
     request_id = str(uuid.uuid4())
+    provider = req.provider.strip().lower()
     log = logger.bind(
         external_user_id=req.external_user_id,
-        provider=req.provider,
+        provider=provider,
         request_id=request_id,
     )
 
@@ -87,7 +88,7 @@ async def trigger(
     try:
         provider_user_id, info = await mapping.get_instance_by_external_id(
             req.external_user_id,
-            provider=req.provider,
+            provider=provider,
         )
     except UnsupportedProviderError as e:
         raise HTTPException(
@@ -116,6 +117,7 @@ async def trigger(
             info=info,
             text=req.text,
             session_key=req.session_key,
+            provider=provider,
         ),
         name=f"trigger-{request_id[:8]}"
     )

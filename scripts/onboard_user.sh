@@ -13,7 +13,9 @@ Usage:
     [--role <role>] \
     [--db-user router] \
     [--db-name ws_router] \
-    [--db-service postgres]
+    [--db-service postgres] \
+    [--router-service ws-router] \
+    [--no-restart]
 
 Description:
   Creates/updates app_user + user_identity and binds the user to an existing
@@ -33,6 +35,8 @@ ROLE=""
 DB_USER="router"
 DB_NAME="ws_router"
 DB_SERVICE="postgres"
+ROUTER_SERVICE="ws-router"
+RESTART_ROUTER="1"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -45,6 +49,8 @@ while [ "$#" -gt 0 ]; do
     --db-user) DB_USER="${2:-}"; shift 2 ;;
     --db-name) DB_NAME="${2:-}"; shift 2 ;;
     --db-service) DB_SERVICE="${2:-}"; shift 2 ;;
+    --router-service) ROUTER_SERVICE="${2:-}"; shift 2 ;;
+    --no-restart) RESTART_ROUTER="0"; shift 1 ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -89,3 +95,8 @@ echo "  external_user_id=$EXTERNAL_USER_ID"
 echo "  provider=$PROVIDER"
 echo "  provider_user_id=$PROVIDER_USER_ID"
 echo "  instance_uuid=$INSTANCE_UUID"
+
+if [ "$RESTART_ROUTER" = "1" ]; then
+  echo "Restarting $ROUTER_SERVICE to invalidate connection cache..."
+  docker compose restart "$ROUTER_SERVICE" >/dev/null
+fi

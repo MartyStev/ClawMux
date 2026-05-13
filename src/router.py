@@ -20,7 +20,12 @@ import structlog
 from src.core.config import settings
 from src.services.dify_client import DifyClient
 from src.services.file_manager import FileManager, build_attachment_context, container_path_to_host, extract_uuid_from_instance_url
-from src.services.mapping import MappingStorage, InstanceNotFoundError, InstanceInfo
+from src.services.mapping import (
+    DEFAULT_PROVIDER,
+    MappingStorage,
+    InstanceNotFoundError,
+    InstanceInfo,
+)
 from src.services.mattermost import MattermostClient, MattermostEvent
 from src.utils.metrics import messages_total, request_duration, ws_errors_total
 from src.services.ws_manager import WSConnectionManager
@@ -43,7 +48,7 @@ class Router:
         self.ws_manager = ws_manager
         self.mattermost = mattermost
         self.file_manager = FileManager(http_client=mattermost._http_client)
-        # Last known channel per user — used for proactive delivery
+        # Last known channel per identity key — used for proactive delivery.
         self._user_channels: Dict[str, str] = {}
         # Dify fallback — active only when DIFY_API_KEY is configured
         self._dify: Optional[DifyClient] = (
@@ -56,6 +61,19 @@ class Router:
             else None
         )
 
+    @staticmethod
+    def _identity_key(provider: str, provider_user_id: str) -> str:
+        return f"{provider}:{provider_user_id}"
+
+    @classmethod
+    def _normalize_identity_key(cls, provider: str, user_id: str) -> str:
+        return user_id if user_id.startswith(f"{provider}:") else cls._identity_key(provider, user_id)
+
+    @staticmethod
+    def _provider_user_id(identity_key: str, provider: str) -> str:
+        prefix = f"{provider}:"
+        return identity_key[len(prefix):] if identity_key.startswith(prefix) else identity_key
+
     async def handle_event(self, event: MattermostEvent) -> None:
         """
         Process an incoming Mattermost message.
@@ -66,21 +84,27 @@ class Router:
           3. Send message via persistent WS connection
           4. Reply in Mattermost
         """
+        identity_key = self._identity_key(event.provider, event.user_id)
         log = logger.bind(
-            user_id=event.user_id,
+            provider=event.provider,
+            user_id=identity_key,
+            provider_user_id=event.user_id,
             channel_id=event.channel_id,
             post_id=event.post_id,
         )
 
         # Always update channel mapping so proactive messages know where to go
-        self._user_channels[event.user_id] = event.channel_id
+        self._user_channels[identity_key] = event.channel_id
 
         # Use cached InstanceInfo if WS connection already exists — avoids a
         # DB round-trip on every message for connected users.
-        info = self.ws_manager.get_cached_info(event.user_id)
+        info = self.ws_manager.get_cached_info(identity_key)
         if info is None:
             try:
-                info = await self.mapping.get_instance(event.user_id)
+                info = await self.mapping.get_instance_by_identity(
+                    event.provider,
+                    event.user_id,
+                )
                 log = log.bind(instance_url=info.instance_url)
             except InstanceNotFoundError:
                 log.warning("user_not_mapped")
@@ -154,7 +178,7 @@ class Router:
         # for as long as OpenClaw is generating a response.
         typing_task = asyncio.create_task(
             self._typing_loop(event.channel_id),
-            name=f"typing-{event.user_id[:8]}",
+            name=f"typing-{identity_key[:32]}",
         )
 
         _t_start = time.monotonic()
@@ -162,7 +186,7 @@ class Router:
         try:
             log.info("routing_message", session_key=f"mm:chan:{event.channel_id}")
             response, media_paths = await self.ws_manager.send_message(
-                user_id=event.user_id,
+                user_id=identity_key,
                 info=info,
                 message=message_text,
                 session_key=f"mm:chan:{event.channel_id}",
@@ -253,6 +277,7 @@ class Router:
           4. Replace the placeholder with the final answer
         """
         log.info("dify_fallback_routing")
+        identity_key = self._identity_key(event.provider, event.user_id)
 
         thinking_phrases = [
             "💭 Думаю...",
@@ -275,7 +300,7 @@ class Router:
 
         typing_task = asyncio.create_task(
             self._typing_loop(event.channel_id),
-            name=f"typing-dify-{event.user_id[:8]}",
+            name=f"typing-dify-{identity_key[:32]}",
         )
 
         _t_start = time.monotonic()
@@ -316,24 +341,40 @@ class Router:
             typing_task.cancel()
             request_duration.observe(time.monotonic() - _t_start)
 
-    async def get_or_create_channel(self, user_id: str) -> str:
+    async def get_or_create_channel(
+        self,
+        identity_key: str,
+        provider_user_id: str,
+        provider: str = DEFAULT_PROVIDER,
+    ) -> str:
         """Get the user's last known channel, or create a DM channel."""
-        channel_id = self._user_channels.get(user_id)
+        channel_id = self._user_channels.get(identity_key)
         if not channel_id:
-            channel_id = await self.mattermost.get_or_create_dm_channel(user_id)
+            if provider != DEFAULT_PROVIDER:
+                logger.warning("provider_delivery_not_supported", provider=provider)
+                return ""
+            channel_id = await self.mattermost.get_or_create_dm_channel(provider_user_id)
             if channel_id:
-                self._user_channels[user_id] = channel_id
+                self._user_channels[identity_key] = channel_id
         return channel_id or ""
 
-    async def trigger_message(self, user_id: str, info: InstanceInfo, text: str, session_key: Optional[str] = None) -> None:
+    async def trigger_message(
+        self,
+        user_id: str,
+        info: InstanceInfo,
+        text: str,
+        session_key: Optional[str] = None,
+        provider: str = DEFAULT_PROVIDER,
+    ) -> None:
         """
         Handle a message triggered by the Control-Plane API.
         Similar to handle_event, but the message originates from an external system.
         Does NOT show a typing indicator or streaming, wait for full response
         and then deliver it as a single proactive message.
         """
-        log = logger.bind(user_id=user_id)
-        channel_id = await self.get_or_create_channel(user_id)
+        identity_key = self._identity_key(provider, user_id)
+        log = logger.bind(provider=provider, user_id=identity_key, provider_user_id=user_id)
+        channel_id = await self.get_or_create_channel(identity_key, user_id, provider)
 
         if not session_key:
             session_key = f"mm:chan:{channel_id}" if channel_id else "agent:main:main"
@@ -344,7 +385,7 @@ class Router:
         try:
             log.info("triggering_message")
             response, media_paths = await self.ws_manager.send_message(
-                user_id=user_id,
+                user_id=identity_key,
                 info=info,
                 message=text,
                 session_key=session_key,
@@ -369,14 +410,29 @@ class Router:
             request_duration.observe(time.monotonic() - _t_start)
 
 
-    async def handle_proactive(self, user_id: str, text: str) -> None:
+    async def handle_proactive(
+        self,
+        user_id: str,
+        text: str,
+        provider: str = DEFAULT_PROVIDER,
+    ) -> None:
         """
         Deliver a proactive message from OpenClaw to the user's last known channel.
         Called by WSConnectionManager when OpenClaw pushes an unsolicited message.
         """
-        log = logger.bind(user_id=user_id)
+        identity_key = self._normalize_identity_key(provider, user_id)
+        provider_user_id = self._provider_user_id(identity_key, provider)
+        log = logger.bind(
+            provider=provider,
+            user_id=identity_key,
+            provider_user_id=provider_user_id,
+        )
 
-        channel_id = await self.get_or_create_channel(user_id)
+        channel_id = await self.get_or_create_channel(
+            identity_key,
+            provider_user_id,
+            provider,
+        )
         if not channel_id:
             log.warning("proactive_no_channel_known_and_dm_failed", text_preview=text[:80])
             return

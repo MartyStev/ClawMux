@@ -17,6 +17,7 @@ import structlog
 import websockets
 
 from src.core.config import settings
+from src.services.mapping import DEFAULT_PROVIDER
 
 logger = structlog.get_logger(__name__)
 
@@ -24,7 +25,7 @@ logger = structlog.get_logger(__name__)
 class MattermostEvent:
     """Parsed incoming Mattermost message event."""
 
-    __slots__ = ("user_id", "channel_id", "text", "post_id", "file_ids")
+    __slots__ = ("provider", "user_id", "channel_id", "text", "post_id", "file_ids")
 
     def __init__(
         self,
@@ -33,7 +34,9 @@ class MattermostEvent:
         text: str,
         post_id: str,
         file_ids: list[str] | None = None,
+        provider: str = DEFAULT_PROVIDER,
     ):
+        self.provider = provider
         self.user_id = user_id
         self.channel_id = channel_id
         self.text = text
@@ -42,7 +45,7 @@ class MattermostEvent:
 
     def __repr__(self) -> str:
         return (
-            f"MattermostEvent(user_id={self.user_id!r}, "
+            f"MattermostEvent(provider={self.provider!r}, user_id={self.user_id!r}, "
             f"channel_id={self.channel_id!r}, text={self.text[:50]!r}, "
             f"file_ids={self.file_ids!r})"
         )

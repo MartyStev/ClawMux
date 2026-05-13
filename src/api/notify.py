@@ -49,7 +49,8 @@ async def notify(
             detail="Invalid or missing API token",
         )
 
-    log = logger.bind(external_user_id=req.external_user_id, provider=req.provider)
+    provider = req.provider.strip().lower()
+    log = logger.bind(external_user_id=req.external_user_id, provider=provider)
     
     mapping = request.app.state.mapping
     app_router = request.app.state.router
@@ -57,7 +58,7 @@ async def notify(
     try:
         provider_user_id, _ = await mapping.get_instance_by_external_id(
             req.external_user_id,
-            provider=req.provider,
+            provider=provider,
         )
     except UnsupportedProviderError as e:
         raise HTTPException(
@@ -78,6 +79,7 @@ async def notify(
         app_router.handle_proactive(
             user_id=provider_user_id,
             text=req.text,
+            provider=provider,
         ),
         name=f"notify-{provider_user_id[:8]}"
     )

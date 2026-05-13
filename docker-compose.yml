@@ -32,17 +32,14 @@ services:
     ports:
       - "127.0.0.1:8060:8060"
     volumes:
-      - /root/openclaw/user-configs:/configs   # shared volume: ws_router ↔ OpenClaw workspaces
+      - ${OPENCLAW_CONFIGS_PATH:-./configs}:/configs
     restart: unless-stopped
     networks:
       - backend
-      - ai-network
 
 networks:
   backend:
     driver: bridge
-  ai-network:
-    external: true
 
 volumes:
   postgres_data:

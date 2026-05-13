@@ -2,25 +2,18 @@
 
 BEGIN;
 
--- Ensure target OpenClaw instance exists.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM instance
-        WHERE instance_uuid = :'instance_uuid'
-    ) THEN
-        RAISE EXCEPTION 'Instance "%" does not exist in table "instance"', :'instance_uuid';
-    END IF;
-END
-$$;
+-- Abort early unless target OpenClaw instance exists.
+SELECT instance_uuid AS checked_instance_uuid
+FROM instance
+WHERE instance_uuid = :'instance_uuid'
+\gset
 
--- Upsert canonical user.
+-- Upsert canonical user only after the instance check succeeds.
 INSERT INTO app_user (id, external_user_id, role)
-VALUES (:'app_user_id', :'external_user_id', NULLIF(:'role', ''))
+SELECT :'app_user_id', :'external_user_id', NULLIF(:'role', '')
+WHERE :'checked_instance_uuid' = :'instance_uuid'
 ON CONFLICT (id) DO UPDATE
-SET
-    external_user_id = EXCLUDED.external_user_id,
+SET external_user_id = EXCLUDED.external_user_id,
     role = COALESCE(EXCLUDED.role, app_user.role);
 
 -- Keep one identity per provider for this user.
