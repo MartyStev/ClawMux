@@ -12,6 +12,11 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from src.core.config import settings
+from src.services.mapping import (
+    DEFAULT_PROVIDER,
+    InstanceNotFoundError,
+    UnsupportedProviderError,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -20,6 +25,7 @@ router = APIRouter(prefix="/api/v1", tags=["control-plane"])
 
 class NotifyRequest(BaseModel):
     external_user_id: str
+    provider: str = DEFAULT_PROVIDER
     text: str
 
 
@@ -35,7 +41,7 @@ async def notify(
 ) -> NotifyResponse:
     """
     Отправить системное уведомление напрямую пользователю в Mattermost.
-    Находит Mattermost user_id по переданному external_user_id.
+    Находит identity пользователя по external_user_id + provider.
     """
     if not settings.api_token or x_api_token != settings.api_token:
         raise HTTPException(
@@ -43,29 +49,37 @@ async def notify(
             detail="Invalid or missing API token",
         )
 
-    log = logger.bind(external_user_id=req.external_user_id)
+    log = logger.bind(external_user_id=req.external_user_id, provider=req.provider)
     
     mapping = request.app.state.mapping
     app_router = request.app.state.router
 
     try:
-        mm_user_id, _ = await mapping.get_instance_by_external_id(req.external_user_id)
-    except Exception as e:
-        log.warning("notify_external_user_not_found", error=str(e))
+        provider_user_id, _ = await mapping.get_instance_by_external_id(
+            req.external_user_id,
+            provider=req.provider,
+        )
+    except UnsupportedProviderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Provider is not enabled: {e.provider!r}",
+        )
+    except InstanceNotFoundError:
+        log.warning("notify_external_user_not_found")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No mapping for external_user_id={req.external_user_id!r}",
         )
 
-    log = log.bind(mm_user_id=mm_user_id)
+    log = log.bind(provider_user_id=provider_user_id)
     
     # Запускаем отправку в фоне, не блокируем ответ API
     asyncio.create_task(
         app_router.handle_proactive(
-            user_id=mm_user_id,
+            user_id=provider_user_id,
             text=req.text,
         ),
-        name=f"notify-{mm_user_id[:8]}"
+        name=f"notify-{provider_user_id[:8]}"
     )
 
     log.info("notify_dispatched", text_len=len(req.text))

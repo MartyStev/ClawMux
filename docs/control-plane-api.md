@@ -27,6 +27,7 @@ X-Api-Token: <API_TOKEN>
 ```json
 {
   "external_user_id": "user-ext-123",
+  "provider": "mattermost",
   "text": "Сделай краткий отчёт по продажам",
   "session_key": "agent:main:main"
 }
@@ -35,6 +36,7 @@ X-Api-Token: <API_TOKEN>
 Поля:
 
 - `external_user_id` (string, required): внешний идентификатор пользователя из вашей системы
+- `provider` (string, optional): провайдер канала, по умолчанию `mattermost`
 - `text` (string, required): текст задачи
 - `session_key` (string, optional): ключ сессии OpenClaw
 
@@ -56,6 +58,7 @@ X-Api-Token: <API_TOKEN>
 ```json
 {
   "external_user_id": "user-ext-123",
+  "provider": "mattermost",
   "text": "Напоминание: дейли через 10 минут"
 }
 ```
@@ -72,6 +75,7 @@ X-Api-Token: <API_TOKEN>
 
 - `401 Unauthorized`: неверный или отсутствующий `X-Api-Token`
 - `404 Not Found`: не найден маппинг пользователя
+- `400 Bad Request`: провайдер канала не включён
 - `422 Unprocessable Entity`: невалидное тело запроса
 
 ## Пример `curl`
@@ -80,5 +84,8 @@ X-Api-Token: <API_TOKEN>
 curl -X POST http://localhost:8060/api/v1/trigger \
   -H "X-Api-Token: change-me-to-a-strong-secret" \
   -H "Content-Type: application/json" \
-  -d '{"external_user_id":"user-ext-123","text":"Сделай отчёт"}'
+  -d '{"external_user_id":"user-ext-123","provider":"mattermost","text":"Сделай отчёт"}'
 ```
+
+
+Важно: multi-channel структура уже есть в БД, но в runtime включён только `mattermost`.

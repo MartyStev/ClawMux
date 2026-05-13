@@ -2,10 +2,10 @@
 WS Router — Mapping Storage.
 
 Provides lookup:
-  user_id       → (instance_url, device_credentials)  — Mattermost routing
-  external_user_id → (instance_url, device_credentials)  — Control-Plane API
+  provider_user_id + provider → (instance_url, device_credentials)
+  external_user_id + provider → provider_user_id + instance info
 
-Reads from tables: instance, mm_user, user_instance (join).
+Reads from tables: instance, app_user, user_identity, user_instance (join).
 """
 
 import structlog
@@ -13,12 +13,13 @@ from asyncache import cached
 from cachetools import TTLCache
 from dataclasses import dataclass
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import async_session_factory
-from src.core.models import Instance, MmUser, UserInstance
+from src.core.models import AppUser, Instance, UserIdentity, UserInstance
 
 logger = structlog.get_logger(__name__)
+DEFAULT_PROVIDER = "mattermost"
+SUPPORTED_PROVIDERS = {DEFAULT_PROVIDER}
 
 
 class InstanceNotFoundError(Exception):
@@ -27,6 +28,14 @@ class InstanceNotFoundError(Exception):
     def __init__(self, identifier: str):
         self.identifier = identifier
         super().__init__(f"No OpenClaw instance found for {identifier!r}")
+
+
+class UnsupportedProviderError(Exception):
+    """Raised when a provider is not yet supported by routing logic."""
+
+    def __init__(self, provider: str):
+        self.provider = provider
+        super().__init__(f"Unsupported provider: {provider!r}")
 
 
 @dataclass(slots=True, frozen=True)
@@ -51,10 +60,17 @@ class InstanceInfo:
 class MappingStorage:
     """Reads user → instance mapping from PostgreSQL (3NF schema)."""
 
+    @staticmethod
+    def _validate_provider(provider: str) -> str:
+        normalized = provider.strip().lower()
+        if normalized not in SUPPORTED_PROVIDERS:
+            raise UnsupportedProviderError(provider)
+        return normalized
+
     @cached(cache=TTLCache(maxsize=1000, ttl=600))
     async def get_instance(self, user_id: str) -> InstanceInfo:
         """
-        Get OpenClaw instance info for a user by Mattermost user_id.
+        Get instance info for Mattermost user ID (current default provider).
 
         Args:
             user_id: Mattermost user ID.
@@ -65,22 +81,41 @@ class MappingStorage:
         Raises:
             InstanceNotFoundError: if no active assignment exists.
         """
+        return await self.get_instance_by_identity(DEFAULT_PROVIDER, user_id)
+
+    @cached(cache=TTLCache(maxsize=1000, ttl=600))
+    async def get_instance_by_identity(
+        self,
+        provider: str,
+        provider_user_id: str,
+    ) -> InstanceInfo:
+        """
+        Get OpenClaw instance by channel identity (provider + provider_user_id).
+        """
+        provider = self._validate_provider(provider)
         async with async_session_factory() as session:
             stmt = (
                 select(Instance)
                 .join(UserInstance, UserInstance.instance_uuid == Instance.instance_uuid)
-                .where(UserInstance.user_id == user_id)
+                .join(AppUser, AppUser.id == UserInstance.user_id)
+                .join(UserIdentity, UserIdentity.user_id == AppUser.id)
+                .where(UserIdentity.provider == provider)
+                .where(UserIdentity.provider_user_id == provider_user_id)
             )
             result = await session.execute(stmt)
             instance = result.scalar_one_or_none()
 
             if instance is None:
-                logger.warning("instance_not_found", user_id=user_id)
-                raise InstanceNotFoundError(user_id)
-
+                logger.warning(
+                    "instance_not_found_by_identity",
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                )
+                raise InstanceNotFoundError(f"{provider}:{provider_user_id}")
             logger.debug(
-                "instance_resolved",
-                user_id=user_id,
+                "instance_resolved_by_identity",
+                provider=provider,
+                provider_user_id=provider_user_id,
                 instance_url=instance.instance_url,
             )
             return InstanceInfo(
@@ -95,25 +130,33 @@ class MappingStorage:
             )
 
     @cached(cache=TTLCache(maxsize=1000, ttl=600))
-    async def get_instance_by_external_id(self, external_user_id: str) -> tuple[str, InstanceInfo]:
+    async def get_instance_by_external_id(
+        self,
+        external_user_id: str,
+        provider: str = DEFAULT_PROVIDER,
+    ) -> tuple[str, InstanceInfo]:
         """
-        Get OpenClaw instance info for a user by external user ID.
+        Resolve provider user ID + instance by external user ID.
 
         Args:
             external_user_id: External user identifier.
+            provider: Identity provider (currently: mattermost).
 
         Returns:
-            Tuple of (mattermost_user_id, InstanceInfo).
+            Tuple of (provider_user_id, InstanceInfo).
 
         Raises:
             InstanceNotFoundError: if no mapping exists.
         """
+        provider = self._validate_provider(provider)
         async with async_session_factory() as session:
             stmt = (
-                select(MmUser, Instance)
-                .join(UserInstance, UserInstance.user_id == MmUser.user_id)
+                select(AppUser, UserIdentity.provider_user_id, Instance)
+                .join(UserIdentity, UserIdentity.user_id == AppUser.id)
+                .join(UserInstance, UserInstance.user_id == AppUser.id)
                 .join(Instance, Instance.instance_uuid == UserInstance.instance_uuid)
-                .where(MmUser.external_user_id == external_user_id)
+                .where(AppUser.external_user_id == external_user_id)
+                .where(UserIdentity.provider == provider)
             )
             result = await session.execute(stmt)
             row = result.one_or_none()
@@ -122,18 +165,21 @@ class MappingStorage:
                 logger.warning(
                     "instance_not_found_by_external_id",
                     external_user_id=external_user_id,
+                    provider=provider,
                 )
-                raise InstanceNotFoundError(external_user_id)
+                raise InstanceNotFoundError(f"{provider}:{external_user_id}")
 
-            user, instance = row
+            user, provider_user_id, instance = row
 
             logger.debug(
                 "instance_resolved_by_external_id",
                 external_user_id=external_user_id,
-                user_id=user.user_id,
+                provider=provider,
+                app_user_id=user.id,
+                provider_user_id=provider_user_id,
                 instance_url=instance.instance_url,
             )
-            return user.user_id, InstanceInfo(
+            return provider_user_id, InstanceInfo(
                 instance_url=instance.instance_url,
                 credentials=DeviceCredentials(
                     device_id=instance.device_id,

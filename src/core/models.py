@@ -1,16 +1,17 @@
 """
 WS Router — SQLAlchemy models (3NF).
 
-Три таблицы:
+Таблицы:
   instance       — инстансы OpenClaw + device credentials
-  mm_user        — пользователи Mattermost + внешний идентификатор
+  app_user       — канонический пользователь внутри роутера
+  user_identity  — идентичность пользователя в конкретном провайдере
   user_instance  — активная привязка пользователя к инстансу (1:1)
 """
 
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 
@@ -64,17 +65,18 @@ class Instance(Base):
     )
 
 
-class MmUser(Base):
+class AppUser(Base):
     """
-    Пользователь (Mattermost + external id).
+    Канонический пользователь роутера.
 
-    Хранит идентификаторы. Может быть не привязан к инстансу.
+    Хранит внешний идентификатор бизнес-системы и роль.
+    Идентичности каналов (Mattermost/Slack/...) хранятся в user_identity.
     """
 
-    __tablename__ = "mm_user"
+    __tablename__ = "app_user"
 
-    user_id: str = Column(
-        String(64), primary_key=True, comment="Mattermost user_id",
+    id: str = Column(
+        String(64), primary_key=True, comment="Internal router user identifier",
     )
     external_user_id: Optional[str] = Column(
         String(128), nullable=True, unique=True, index=True,
@@ -89,9 +91,48 @@ class MmUser(Base):
     )
 
     # ── Relations ─────────────────────────────────────────────────────────────
+    identities: list["UserIdentity"] = relationship(
+        "UserIdentity",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     assignment: Optional["UserInstance"] = relationship(
         "UserInstance", back_populates="user", uselist=False,
     )
+
+
+class UserIdentity(Base):
+    """
+    Идентичность пользователя в канале/провайдере.
+
+    Примеры:
+      provider='mattermost', provider_user_id='<mattermost_user_id>'
+      provider='slack',      provider_user_id='<slack_user_id>'
+    """
+
+    __tablename__ = "user_identity"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_user_identity_user_provider"),
+        # Один аккаунт пользователя на провайдера (например, один Mattermost ID)
+        {"comment": "Provider identities for router users"},
+    )
+
+    user_id: str = Column(
+        String(64), ForeignKey("app_user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider: str = Column(
+        String(32), primary_key=True,
+        comment="Identity provider, e.g. mattermost/slack",
+    )
+    provider_user_id: str = Column(
+        String(128), primary_key=True, comment="User identifier inside provider",
+    )
+    created_at: datetime = Column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+
+    user: AppUser = relationship("AppUser", back_populates="identities")
 
 
 class UserInstance(Base):
@@ -99,7 +140,7 @@ class UserInstance(Base):
     Активная привязка пользователя к инстансу (1:1).
 
     instance_uuid — PK и FK на instance (1 инстанс = 1 активный юзер)
-    user_id       — UNIQUE FK на mm_user (1 юзер = 1 активный инстанс)
+    user_id       — UNIQUE FK на app_user (1 юзер = 1 активный инстанс)
 
     Для освобождения инстанса — удалить строку (DELETE).
     Для переназначения — сначала DELETE, потом INSERT.
@@ -112,7 +153,7 @@ class UserInstance(Base):
         primary_key=True,
     )
     user_id: str = Column(
-        String(64), ForeignKey("mm_user.user_id", ondelete="CASCADE"),
+        String(64), ForeignKey("app_user.id", ondelete="CASCADE"),
         nullable=False, unique=True,
     )
     assigned_at: datetime = Column(
@@ -121,4 +162,4 @@ class UserInstance(Base):
 
     # ── Relations ─────────────────────────────────────────────────────────────
     instance: Instance = relationship("Instance", back_populates="assignment")
-    user: MmUser = relationship("MmUser", back_populates="assignment")
+    user: AppUser = relationship("AppUser", back_populates="assignment")

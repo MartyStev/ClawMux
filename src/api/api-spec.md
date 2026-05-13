@@ -1,6 +1,6 @@
 # OpenClaw WS Router — API Spec
 
-Version: 1.2
+Version: 1.3
 
 ## Authentication
 
@@ -19,6 +19,7 @@ Request:
 ```json
 {
   "external_user_id": "user-ext-123",
+  "provider": "mattermost",
   "text": "Generate weekly sales summary",
   "session_key": "agent:main:main"
 }
@@ -42,6 +43,7 @@ Request:
 ```json
 {
   "external_user_id": "user-ext-123",
+  "provider": "mattermost",
   "text": "Reminder: standup in 10 minutes"
 }
 ```
@@ -58,4 +60,8 @@ Success response:
 
 - `401` invalid or missing API token
 - `404` no instance mapping for provided user id
+- `400` provider is not enabled
 - `422` malformed JSON or missing required fields
+
+
+Only `mattermost` is enabled in the current runtime; `provider` is added for forward-compatible multi-channel API contracts.

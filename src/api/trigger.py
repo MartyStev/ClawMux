@@ -10,8 +10,8 @@ OpenClaw получает задачу и сам пишет ответ поль�
 Аутентификация: заголовок X-Api-Token (значение из env API_TOKEN).
 
 Маршрутизация: запрос содержит `external_user_id` — внешний идентификатор пользователя.
-Роутер ищет строку в БД по `external_user_id` и получает внутренний Mattermost `user_id`
-для подключения к нужному инстансу OpenClaw.
+Роутер ищет строку в БД по (`external_user_id`, `provider`) и получает
+внутренний provider-specific `user_id` для подключения к нужному инстансу OpenClaw.
 """
 import asyncio
 import uuid
@@ -22,7 +22,11 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from src.core.config import settings
-from src.services.mapping import InstanceNotFoundError
+from src.services.mapping import (
+    DEFAULT_PROVIDER,
+    InstanceNotFoundError,
+    UnsupportedProviderError,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -34,6 +38,7 @@ router = APIRouter(prefix="/api/v1", tags=["control-plane"])
 
 class TriggerRequest(BaseModel):
     external_user_id: str
+    provider: str = DEFAULT_PROVIDER
     text: str
     session_key: Optional[str] = None  # default: "agent:main:main"
 
@@ -55,8 +60,8 @@ async def trigger(
     """
     Отправить задачу пользователю в OpenClaw (fire-and-forget).
 
-    - Принимает `external_user_id` — внешний идентификатор пользователя.
-    - Роутер находит нужный инстанс OpenClaw по `external_user_id` через БД.
+    - Принимает `external_user_id` и `provider`.
+    - Роутер находит нужный инстанс OpenClaw через БД.
     - Возвращает {"status": "sent"} немедленно.
     - OpenClaw обрабатывает задачу и сам пишет ответ пользователю.
     - Требует заголовок X-Api-Token.
@@ -72,11 +77,23 @@ async def trigger(
     mapping = request.app.state.mapping
 
     request_id = str(uuid.uuid4())
-    log = logger.bind(external_user_id=req.external_user_id, request_id=request_id)
+    log = logger.bind(
+        external_user_id=req.external_user_id,
+        provider=req.provider,
+        request_id=request_id,
+    )
 
-    # ── Resolve: external_user_id → Mattermost user_id + InstanceInfo ──
+    # ── Resolve: external_user_id + provider → provider_user_id + InstanceInfo ──
     try:
-        mm_user_id, info = await mapping.get_instance_by_external_id(req.external_user_id)
+        provider_user_id, info = await mapping.get_instance_by_external_id(
+            req.external_user_id,
+            provider=req.provider,
+        )
+    except UnsupportedProviderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Provider is not enabled: {e.provider!r}",
+        )
     except InstanceNotFoundError:
         log.warning("trigger_external_user_not_found")
         raise HTTPException(
@@ -84,7 +101,7 @@ async def trigger(
             detail=f"No OpenClaw instance configured for external_user_id={req.external_user_id!r}",
         )
 
-    log = log.bind(mm_user_id=mm_user_id)
+    log = log.bind(provider_user_id=provider_user_id)
 
     # ── Dispatch to Router for processing and UI feedback ────────
     app_router = request.app.state.router
@@ -95,7 +112,7 @@ async def trigger(
     # 3. Handle the response
     asyncio.create_task(
         app_router.trigger_message(
-            user_id=mm_user_id,
+            user_id=provider_user_id,
             info=info,
             text=req.text,
             session_key=req.session_key,

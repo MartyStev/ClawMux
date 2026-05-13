@@ -1,30 +1,47 @@
-# OpenClaw WS Router
+# ClawMux — OpenClaw WS Router
 
-Open-source роутер между Mattermost и персональными OpenClaw instance-ами.
+Open-source control plane that routes chat traffic from Mattermost to per-user OpenClaw instances over persistent WebSocket connections.
 
-Сервис держит persistent WebSocket к OpenClaw для каждого пользователя, маршрутизирует входящие сообщения, поддерживает proactive ответы и предоставляет Control-Plane API для внешних систем.
+ClawMux is built for teams that want strict workspace isolation (`1 user = 1 instance`), proactive agent messages, and a clean API for external triggers.
 
-## Возможности
+## What You Can Do
 
-- 1 user = 1 OpenClaw instance (изоляция по пользователю)
-- Persistent WS-подключения и автопереподключение
-- Fire-and-forget API: `POST /api/v1/trigger`
-- Proactive отправка уведомлений: `POST /api/v1/notify`
-- Proxy передачи файлов Mattermost ↔ OpenClaw workspace
-- Healthcheck (`/health`) и Prometheus metrics (`/metrics`)
-- Опциональный fallback в Dify
+- Route user messages from Mattermost to dedicated OpenClaw instances
+- Keep persistent WS sessions with auto-reconnect and idle cleanup
+- Trigger async tasks from external systems via `POST /api/v1/trigger`
+- Send proactive notifications via `POST /api/v1/notify`
+- Proxy files both ways: Mattermost attachments ↔ OpenClaw workspace
+- Export health and metrics endpoints for observability (`/health`, `/metrics`)
 
-## Технологии
+## Architecture
 
-- Python 3.11+
-- FastAPI
-- SQLAlchemy (async) + asyncpg
-- Alembic
-- Mattermost API/WS
+```text
+Mattermost WS/HTTP
+      │
+      ▼
+  ClawMux Router
+      ├── MappingStorage (PostgreSQL)
+      ├── WSConnectionManager (persistent OpenClaw WS per user)
+      ├── Control-Plane API (/api/v1/trigger, /api/v1/notify)
+      └── FileManager (attachments/media)
+      │
+      ▼
+OpenClaw Gateway instances (isolated per user)
+```
 
-## Быстрый старт
+### Identity model (future-ready)
 
-### 1. Клонирование и окружение
+ClawMux already uses a provider-aware user model:
+
+- `app_user` — canonical internal user
+- `user_identity` — channel identity (`provider`, `provider_user_id`)
+- `user_instance` — active mapping to OpenClaw instance
+
+`provider` is part of API contracts today, while runtime support is currently enabled for `mattermost`.
+
+## Quick Start
+
+### 1. Configure environment
 
 ```bash
 git clone <your-fork-or-repo-url>
@@ -32,48 +49,49 @@ cd ClawMux
 cp .env.example .env
 ```
 
-Заполните `.env` своими значениями.
+Fill in `.env` values (Mattermost URL/token, API token, etc.).
 
-### 2. Запуск через Docker Compose
+### 2. Start services
 
 ```bash
 docker compose up -d --build
 ```
 
-### 3. Миграции
+This compose stack includes:
 
-Миграции запускаются из `entrypoint.sh` автоматически при старте контейнера.
+- `postgres` (local DB for ClawMux)
+- `ws-router` (FastAPI app + Alembic migrations on startup)
 
-Для ручного запуска:
-
-```bash
-alembic upgrade head
-```
-
-### 4. Проверка
+### 3. Verify
 
 ```bash
 curl http://localhost:8060/health
 ```
 
-## Конфигурация
+## User Onboarding
 
-Основные переменные в `.env.example`:
+When an OpenClaw `instance` row already exists, bind a user with one command:
 
-- `DATABASE_URL` — строка подключения к PostgreSQL
-- `MATTERMOST_URL` — URL Mattermost
-- `MATTERMOST_TOKEN` — токен бота Mattermost
-- `API_TOKEN` — секрет для `X-Api-Token` в Control-Plane API
-- `WORKSPACE_BASE_PATH` — путь внутри `ws-router` контейнера к смонтированным конфигам OpenClaw
-- `DIFY_BASE_URL` / `DIFY_API_KEY` — опциональный fallback
+```bash
+scripts/onboard_user.sh \
+  --app-user-id mm:u_abc123 \
+  --external-user-id ext-1001 \
+  --provider mattermost \
+  --provider-user-id u_abc123 \
+  --instance-uuid 30f2aeff-1111-2222-3333-123456789abc
+```
+
+What this does:
+
+- upsert into `app_user`
+- upsert into `user_identity`
+- enforce reassignment in `user_instance` (1:1 mapping)
 
 ## Control-Plane API
 
 ### `POST /api/v1/trigger`
 
-Отправляет задачу пользователю асинхронно.
-
-Пример запроса:
+Asynchronously dispatch a task to the mapped user instance.
 
 ```bash
 curl -X POST http://localhost:8060/api/v1/trigger \
@@ -81,13 +99,14 @@ curl -X POST http://localhost:8060/api/v1/trigger \
   -H "Content-Type: application/json" \
   -d '{
     "external_user_id": "user-ext-123",
-    "text": "Сделай краткий отчёт по продажам"
+    "provider": "mattermost",
+    "text": "Generate weekly summary"
   }'
 ```
 
 ### `POST /api/v1/notify`
 
-Отправляет системное уведомление пользователю.
+Send proactive notification to user channel.
 
 ```bash
 curl -X POST http://localhost:8060/api/v1/notify \
@@ -95,29 +114,33 @@ curl -X POST http://localhost:8060/api/v1/notify \
   -H "Content-Type: application/json" \
   -d '{
     "external_user_id": "user-ext-123",
-    "text": "Напоминание: ежедневный отчёт через 10 минут"
+    "provider": "mattermost",
+    "text": "Reminder: standup in 10 minutes"
   }'
 ```
 
-## Модель данных (кратко)
+Detailed API docs: [docs/control-plane-api.md](docs/control-plane-api.md)
 
-- `instance` — OpenClaw instance + device credentials
-- `mm_user` — Mattermost user + `external_user_id`
-- `user_instance` — активная привязка пользователя к instance
+## Security
 
-## Структура проекта
+- No secrets in repository templates (`.env.example` is sanitized)
+- API access protected by `X-Api-Token`
+- Channel-level identity mapping separated from internal user model
+- Per-user OpenClaw instance isolation
 
-```text
-src/
-  api/          # HTTP API
-  core/         # config, db, models
-  services/     # Mattermost/OpenClaw clients, mapping, file handling
-  utils/        # health, metrics, aggregation
-alembic/        # database migrations
-docs/           # additional docs
-```
+## Configuration
 
-## Локальная разработка
+Main variables in `.env.example`:
+
+- `DATABASE_URL`
+- `MATTERMOST_URL`
+- `MATTERMOST_TOKEN`
+- `API_TOKEN`
+- `MM_ACTION_PROXY_URL`
+- `WORKSPACE_BASE_PATH`
+- `DIFY_BASE_URL`, `DIFY_API_KEY`
+
+## Development
 
 ```bash
 python -m venv .venv
@@ -127,13 +150,32 @@ alembic upgrade head
 python -m src.main
 ```
 
-## Безопасность
+## Project Structure
 
-- Не коммитьте `.env`, токены и приватные URL
-- Используйте отдельные сервисные аккаунты для Mattermost и OpenClaw
-- Ротируйте `API_TOKEN` и bot-токены
+```text
+src/
+  api/          # FastAPI endpoints
+  core/         # config, db, models
+  services/     # Mattermost/OpenClaw clients, mapping, files
+  utils/        # health, metrics, helpers
+alembic/        # migrations
+scripts/        # operational scripts
+docs/           # design and API docs
+```
 
-## Примечания для open source
+## Roadmap
 
-- Значения в `.env.example` обезличены и безопасны как шаблон
-- Все внешние идентификаторы в API унифицированы как `external_user_id`
+- Add channel adapters beyond Mattermost (Slack/Telegram/etc.)
+- Add provider-specific proactive delivery strategies
+- Add automatic user registration on first inbound message to router
+- Add automatic OpenClaw instance provisioning for newly registered users
+- Add integration tests for mapping and trigger/notify flows
+- Add production deployment guide (HA, backups, secret management)
+
+## Open Source Notes
+
+This repository is prepared for public use:
+
+- neutral naming (`external_user_id`, provider-aware identities)
+- no hardcoded private infra in defaults
+- local PostgreSQL in compose for reproducible startup
