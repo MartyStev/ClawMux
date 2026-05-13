@@ -21,6 +21,9 @@ logger = structlog.get_logger(__name__)
 DEFAULT_PROVIDER = "mattermost"
 SUPPORTED_PROVIDERS = {DEFAULT_PROVIDER}
 
+_identity_cache = TTLCache(maxsize=1000, ttl=600)
+_external_id_cache = TTLCache(maxsize=1000, ttl=600)
+
 
 class InstanceNotFoundError(Exception):
     """Raised when no OpenClaw instance is mapped for a user."""
@@ -67,7 +70,6 @@ class MappingStorage:
             raise UnsupportedProviderError(provider)
         return normalized
 
-    @cached(cache=TTLCache(maxsize=1000, ttl=600))
     async def get_instance(self, user_id: str) -> InstanceInfo:
         """
         Get instance info for Mattermost user ID (current default provider).
@@ -83,7 +85,7 @@ class MappingStorage:
         """
         return await self.get_instance_by_identity(DEFAULT_PROVIDER, user_id)
 
-    @cached(cache=TTLCache(maxsize=1000, ttl=600))
+    @cached(cache=_identity_cache)
     async def get_instance_by_identity(
         self,
         provider: str,
@@ -129,7 +131,7 @@ class MappingStorage:
                 ),
             )
 
-    @cached(cache=TTLCache(maxsize=1000, ttl=600))
+    @cached(cache=_external_id_cache)
     async def get_instance_by_external_id(
         self,
         external_user_id: str,
@@ -189,3 +191,16 @@ class MappingStorage:
                     gateway_token=instance.gateway_token,
                 ),
             )
+
+    def invalidate_identity_cache(self) -> None:
+        """Clear cached identity lookups after a mapping change."""
+        _identity_cache.clear()
+
+    def invalidate_external_id_cache(self) -> None:
+        """Clear cached external_id lookups after a mapping change."""
+        _external_id_cache.clear()
+
+    def invalidate_cache(self) -> None:
+        """Clear all mapping caches."""
+        self.invalidate_identity_cache()
+        self.invalidate_external_id_cache()

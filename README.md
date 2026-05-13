@@ -1,17 +1,47 @@
-# ClawMux — OpenClaw WS Router
+# ClawMux — AI Router for OpenClaw
 
-Open-source control plane that routes chat traffic from Mattermost to per-user OpenClaw instances over persistent WebSocket connections.
+ClawMux is a lightweight multi-user control plane that routes Mattermost chat traffic to per-user OpenClaw instances over persistent WebSocket connections.
 
-ClawMux is built for teams that want strict workspace isolation (`1 user = 1 instance`), proactive agent messages, and a clean API for external triggers.
+It is designed as an isolation-first solution for organizations that need strict multi-user separation across OpenClaw workspaces. It solves the operational gap between chat systems and isolated OpenClaw workspaces by providing:
 
-## What You Can Do
+- dedicated OpenClaw routing per user
+- proactive outbound notifications to OpenClaw users
+- external trigger API for OpenClaw workloads
+- file proxying between Mattermost and OpenClaw workspaces
+- health and metrics endpoints for observability of OpenClaw routing
 
-- Route user messages from Mattermost to dedicated OpenClaw instances
-- Keep persistent WS sessions with auto-reconnect and idle cleanup
-- Trigger async tasks from external systems via `POST /api/v1/trigger`
-- Send proactive notifications via `POST /api/v1/notify`
-- Proxy files both ways: Mattermost attachments ↔ OpenClaw workspace
-- Export health and metrics endpoints for observability (`/health`, `/metrics`)
+## What ClawMux Does
+
+- **Route messages from Mattermost** to a mapped OpenClaw instance
+- **Keep persistent WebSocket sessions** with auto-reconnect and idle cleanup
+- **Deliver proactive notifications** back into Mattermost
+- **Proxy attachments and media** between Mattermost and OpenClaw workspaces
+- **Expose a control-plane API** for external task triggers
+- **Fallback to Dify** when user mapping is missing and DIFY API key is configured
+
+## What Is an Instance?
+
+In ClawMux, an instance is a user-specific OpenClaw workspace reachable via its gateway URL.
+
+Each instance is treated as an isolated AI workspace:
+
+- one OpenClaw instance per user mapping
+- per-channel identity via `provider` + `provider_user_id`
+- persistent WS connectivity to send/receive messages
+- file context injected from Mattermost attachments
+
+This repository does not provision containers itself; it routes traffic to already provisioned OpenClaw instances and keeps the session alive.
+
+## OpenClaw Integration
+
+ClawMux is built specifically for OpenClaw integration and supports OpenClaw gateway routing, OpenClaw session management, and OpenClaw attachment synchronization.
+
+- routes Mattermost messages into OpenClaw agent workspaces
+- forwards OpenClaw proactive messages back to Mattermost
+- downloads and uploads files on behalf of OpenClaw instances
+- maintains user mappings for OpenClaw identities in PostgreSQL
+
+This makes ClawMux an ideal companion for OpenClaw deployments where each user has a dedicated OpenClaw workspace.
 
 ## Architecture
 
@@ -20,125 +50,98 @@ Mattermost WS/HTTP
       │
       ▼
   ClawMux Router
-      ├── MappingStorage (PostgreSQL)
-      ├── WSConnectionManager (persistent OpenClaw WS per user)
-      ├── Control-Plane API (/api/v1/trigger, /api/v1/notify)
-      └── FileManager (attachments/media)
+      ├─ MappingStorage (PostgreSQL)
+      ├─ WSConnectionManager (persistent OpenClaw WS)
+      ├─ Router core (message and proactive delivery)
+      ├─ Control-Plane API (/api/v1/trigger, /api/v1/notify)
+      └─ FileManager (attachments/media sync)
       │
       ▼
-OpenClaw Gateway instances (isolated per user)
+OpenClaw instances (one per user mapping)
 ```
 
-### Identity model (future-ready)
+The router maintains a provider-aware identity model and a live mapping from external users to OpenClaw instance URLs.
 
-ClawMux already uses a provider-aware user model:
+## Access Control
 
-- `app_user` — canonical internal user
-- `user_identity` — channel identity (`provider`, `provider_user_id`)
-- `user_instance` — active mapping to OpenClaw instance
+ClawMux is built as a multi-user isolation solution with strong boundaries between users and their OpenClaw workspaces.
 
-`provider` is part of API contracts today, while runtime support is currently enabled for `mattermost`.
+- `external_user_id` + `provider` identity keys
+- `user_instance` mappings stored in PostgreSQL
+- API authentication via `X-Api-Token`
+- scoped delivery only to mapped instances
+- per-user instance routing to prevent cross-user access
+- all Mattermost traffic is routed through a single bot channel
 
-## Quick Start
-
-### 1. Configure environment
-
-```bash
-git clone <your-fork-or-repo-url>
-cd ClawMux
-cp .env.example .env
-```
-
-Fill in `.env` values (Mattermost URL/token, API token, etc.).
-
-### 2. Start services
-
-```bash
-docker compose up -d --build
-```
-
-This compose stack includes:
-
-- `postgres` (local DB for ClawMux)
-- `ws-router` (FastAPI app + Alembic migrations on startup)
-
-### 3. Verify
-
-```bash
-curl http://localhost:8060/health
-```
-
-## User Onboarding
-
-When an OpenClaw `instance` row already exists, bind a user with one command:
-
-```bash
-scripts/onboard_user.sh \
-  --app-user-id mm:u_abc123 \
-  --external-user-id ext-1001 \
-  --provider mattermost \
-  --provider-user-id u_abc123 \
-  --instance-uuid 30f2aeff-1111-2222-3333-123456789abc
-```
-
-What this does:
-
-- upsert into `app_user`
-- upsert into `user_identity`
-- enforce reassignment in `user_instance` (1:1 mapping)
+Today the runtime channel adapter is built for `mattermost`, but the patterns are provider-agnostic.
 
 ## Control-Plane API
 
+All control-plane requests require an `X-Api-Token` header.
+
 ### `POST /api/v1/trigger`
 
-Asynchronously dispatch a task to the mapped user instance.
+Send an asynchronous task to the mapped user's OpenClaw instance.
 
 ```bash
 curl -X POST http://localhost:8060/api/v1/trigger \
-  -H "X-Api-Token: change-me" \
+  -H "X-Api-Token: ${API_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "external_user_id": "user-ext-123",
     "provider": "mattermost",
-    "text": "Generate weekly summary"
+    "text": "Сделай краткий отчёт по продажам"
   }'
 ```
 
 ### `POST /api/v1/notify`
 
-Send proactive notification to user channel.
+Send a proactive notification into Mattermost for the mapped user.
 
 ```bash
 curl -X POST http://localhost:8060/api/v1/notify \
-  -H "X-Api-Token: change-me" \
+  -H "X-Api-Token: ${API_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "external_user_id": "user-ext-123",
     "provider": "mattermost",
-    "text": "Reminder: standup in 10 minutes"
+    "text": "Напоминание: встреча через 10 минут"
   }'
 ```
 
-Detailed API docs: [docs/control-plane-api.md](docs/control-plane-api.md)
+See [docs/control-plane-api.md](docs/control-plane-api.md) for full request and response details.
 
 ## Security
 
-- No secrets in repository templates (`.env.example` is sanitized)
-- API access protected by `X-Api-Token`
-- Channel-level identity mapping separated from internal user model
-- Per-user OpenClaw instance isolation
+- `X-Api-Token` protects control-plane endpoints
+- channel identity is separated from internal user mapping
+- instance URLs stay behind the router
+- no hardcoded secrets in repository templates
+- optional Dify fallback only activates when configured
 
-## Configuration
+## Quick Start
 
-Main variables in `.env.example`:
+### 1. Clone and configure
 
-- `DATABASE_URL`
-- `MATTERMOST_URL`
-- `MATTERMOST_TOKEN`
-- `API_TOKEN`
-- `MM_ACTION_PROXY_URL`
-- `WORKSPACE_BASE_PATH`
-- `DIFY_BASE_URL`, `DIFY_API_KEY`
+```bash
+git clone <your-repo-url>
+cd ClawMux
+cp .env.example .env
+```
+
+Edit `.env` with your Mattermost URL, tokens, database URL, and optional Dify settings.
+
+### 2. Run with Docker Compose
+
+```bash
+docker compose up -d --build
+```
+
+### 3. Check health
+
+```bash
+curl http://localhost:8060/health
+```
 
 ## Development
 
@@ -154,28 +157,49 @@ python -m src.main
 
 ```text
 src/
-  api/          # FastAPI endpoints
-  core/         # config, db, models
-  services/     # Mattermost/OpenClaw clients, mapping, files
+  api/          # FastAPI endpoints for trigger, notify, Mattermost actions
+  core/         # config, database, and ORM models
+  services/     # Mattermost adapter, OpenClaw WS manager, mapping, file proxy
   utils/        # health, metrics, helpers
-alembic/        # migrations
-scripts/        # operational scripts
-docs/           # design and API docs
+alembic/        # database migrations
+scripts/        # onboarding and maintenance scripts
+docs/           # API and architecture docs
 ```
+
+This repository is optimized for OpenClaw routing use cases and includes a service layer designed to manage OpenClaw WebSocket sessions, OpenClaw user mappings, and OpenClaw-aware message delivery.
+
+## Onboarding Users
+
+Use `scripts/onboard_user.sh` to bind an external user to an existing OpenClaw instance:
+
+```bash
+scripts/onboard_user.sh \
+  --app-user-id mm:u_abc123 \
+  --external-user-id user-ext-123 \
+  --provider mattermost \
+  --provider-user-id u_abc123 \
+  --instance-uuid 30f2aeff-1111-2222-3333-123456789abc
+```
+
+This creates or updates:
+
+- `app_user`
+- `user_identity`
+- `user_instance`
+
+## Documentation
+
+- [Control Plane API](docs/control-plane-api.md)
+- [docs/control-plane-api.md](docs/control-plane-api.md)
 
 ## Roadmap
 
-- Add channel adapters beyond Mattermost (Slack/Telegram/etc.)
-- Add provider-specific proactive delivery strategies
-- Add automatic user registration on first inbound message to router
-- Add automatic OpenClaw instance provisioning for newly registered users
-- Add integration tests for mapping and trigger/notify flows
-- Add production deployment guide (HA, backups, secret management)
+- support additional channel adapters beyond Mattermost
+- add automated instance provisioning
+- add UI/dashboard for mapping and health
+- improve production deployment docs and secret management
+- add integration tests for async routing and file proxy
 
-## Open Source Notes
+## Star History
 
-This repository is prepared for public use:
-
-- neutral naming (`external_user_id`, provider-aware identities)
-- no hardcoded private infra in defaults
-- local PostgreSQL in compose for reproducible startup
+[![Star History Chart](https://api.star-history.com/svg?repos=martystev/ClawMux&type=date&legend=top-left)](https://www.star-history.com/#martystev/ClawMux&type=date&legend=top-left)

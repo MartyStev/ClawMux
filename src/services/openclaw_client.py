@@ -21,6 +21,7 @@ Protocol flow:
   5. send_message() drops a chat.send and waits for the aggregated chat.final
 """
 
+import aiofiles
 import asyncio
 import base64
 import json
@@ -335,9 +336,10 @@ class OpenClawClient:
                     # Write full untruncated message to dump file if enabled
                     if dump_file:
                         try:
-                            with open(dump_file, "a") as f:
-                                f.write(raw if isinstance(raw, str) else raw.decode())
-                                f.write("\n")
+                            async with aiofiles.open(dump_file, "a") as f:
+                                content = raw if isinstance(raw, str) else raw.decode("utf-8", "replace")
+                                await f.write(content)
+                                await f.write("\n")
                         except Exception:
                             pass
                     parsed = json.loads(raw)
