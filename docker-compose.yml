@@ -1,0 +1,19 @@
+# Standalone docker-compose для ws-router.
+# Использование: docker compose up -d
+
+services:
+  ws-router:
+    build: .
+    container_name: ws_router
+    env_file: .env
+    ports:
+      - "127.0.0.1:8060:8060"
+    volumes:
+      - /root/openclaw/user-configs:/configs   # shared volume: ws_router ↔ OpenClaw workspaces
+    restart: unless-stopped
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    external: true

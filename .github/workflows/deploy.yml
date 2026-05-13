@@ -1,0 +1,52 @@
+name: Deploy WS Router
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'alembic/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'requirements.txt'
+      - 'alembic.ini'
+      - 'entrypoint.sh'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          known_hosts: placeholder
+
+      - name: Adding Known Hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -e
+
+            sudo -i
+            cd ~/openclaw/ws-router || exit
+            
+            echo "Updating code..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "Building and restarting containers..."
+            docker compose up -d --build
+            
+            echo "Cleaning up old images..."
+            docker image prune -f
+          EOF
