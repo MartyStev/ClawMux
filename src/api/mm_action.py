@@ -51,4 +51,4 @@ async def proxy_mm_action(request: Request):
         logger.error("proxy_mm_action_failed", error=str(e))
         # We must return a valid Mattermost update structure even on failure,
         # otherwise the buttons remain clickable.
-        return {"update": {"message": "⚠️ Ошибка обработки (бэкенд недоступен). Попробуйте ответить текстом."}}
+        return {"update": {"message": "⚠️ Processing error (backend unavailable). Please try replying with text."}}

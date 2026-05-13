@@ -3,15 +3,15 @@ WS Router — Control-Plane API.
 
 POST /api/v1/trigger
 
-Fire-and-forget: внешняя система отправляет задачу конкретному пользователю.
-OpenClaw получает задачу и сам пишет ответ пользователю через
-обычный канал (Mattermost / proactive callback).
+Fire-and-forget: an external system sends a task for a specific user.
+OpenClaw receives the task and replies to the user via the regular channel
+(Mattermost / proactive callback).
 
-Аутентификация: заголовок X-Api-Token (значение из env API_TOKEN).
+Authentication: `X-Api-Token` header (value from env `API_TOKEN`).
 
-Маршрутизация: запрос содержит `external_user_id` — внешний идентификатор пользователя.
-Роутер ищет строку в БД по (`external_user_id`, `provider`) и получает
-внутренний provider-specific `user_id` для подключения к нужному инстансу OpenClaw.
+Routing: the request contains `external_user_id` as the user's external identifier.
+The router looks up the DB row by (`external_user_id`, `provider`) and resolves
+the provider-specific `user_id` used to connect to the target OpenClaw instance.
 """
 import asyncio
 import uuid
@@ -45,7 +45,7 @@ class TriggerRequest(BaseModel):
 
 class TriggerResponse(BaseModel):
     status: str       # "sent"
-    request_id: str   # UUID для трассировки в логах
+    request_id: str   # UUID for tracing in logs
 
 
 # ── Endpoint ─────────────────────────────────────────────────────
@@ -58,13 +58,13 @@ async def trigger(
     x_api_token: str = Header(..., alias="x-api-token"),
 ) -> TriggerResponse:
     """
-    Отправить задачу пользователю в OpenClaw (fire-and-forget).
+    Send a task to a user in OpenClaw (fire-and-forget).
 
-    - Принимает `external_user_id` и `provider`.
-    - Роутер находит нужный инстанс OpenClaw через БД.
-    - Возвращает {"status": "sent"} немедленно.
-    - OpenClaw обрабатывает задачу и сам пишет ответ пользователю.
-    - Требует заголовок X-Api-Token.
+    - Accepts `external_user_id` and `provider`.
+    - Router finds the correct OpenClaw instance through the DB.
+    - Returns {"status": "sent"} immediately.
+    - OpenClaw processes the task and replies to the user.
+    - Requires an `X-Api-Token` header.
     """
     # ── Auth ──────────────────────────────────────────────────────
     if not settings.api_token or x_api_token != settings.api_token:
@@ -109,7 +109,7 @@ async def trigger(
     
     # We pass the trigger logic to the router so it can:
     # 1. Resolve the correct session_key from the Mattermost channel
-    # 2. Show a streaming placeholder ("⏳ Думаю (API задача)...")
+    # 2. Show a streaming placeholder ("⏳ Thinking (API task)...")
     # 3. Handle the response
     asyncio.create_task(
         app_router.trigger_message(

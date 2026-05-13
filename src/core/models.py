@@ -1,11 +1,11 @@
 """
 WS Router — SQLAlchemy models (3NF).
 
-Таблицы:
-  instance       — инстансы OpenClaw + device credentials
-  app_user       — канонический пользователь внутри роутера
-  user_identity  — идентичность пользователя в конкретном провайдере
-  user_instance  — активная привязка пользователя к инстансу (1:1)
+Tables:
+  instance       — OpenClaw instances + device credentials
+  app_user       — canonical user inside the router
+  user_identity  — user identity for a specific provider
+  user_instance  — active user binding to an instance (1:1)
 """
 
 from datetime import datetime
@@ -22,17 +22,17 @@ class Base(DeclarativeBase):
 
 class Instance(Base):
     """
-    Инстанс OpenClaw.
+    OpenClaw instance.
 
-    Хранит device credentials и URL подключения.
-    Инстанс может существовать без привязки к пользователю (свободный пул).
+    Stores device credentials and connection URL.
+    An instance can exist without being assigned to a user (idle pool).
     """
 
     __tablename__ = "instance"
 
     instance_uuid: str = Column(
         String(36), primary_key=True,
-        comment="UUID контейнера/директории (openclaw-gw-<UUID>)",
+        comment="Container/directory UUID (openclaw-gw-<UUID>)",
     )
     instance_url: str = Column(
         Text, nullable=False,
@@ -67,10 +67,10 @@ class Instance(Base):
 
 class AppUser(Base):
     """
-    Канонический пользователь роутера.
+    Canonical router user.
 
-    Хранит внешний идентификатор бизнес-системы и роль.
-    Идентичности каналов (Mattermost/Slack/...) хранятся в user_identity.
+    Stores the external system user identifier and role.
+    Channel identities (Mattermost/Slack/...) are stored in user_identity.
     """
 
     __tablename__ = "app_user"
@@ -103,9 +103,9 @@ class AppUser(Base):
 
 class UserIdentity(Base):
     """
-    Идентичность пользователя в канале/провайдере.
+    User identity in a channel/provider.
 
-    Примеры:
+    Examples:
       provider='mattermost', provider_user_id='<mattermost_user_id>'
       provider='slack',      provider_user_id='<slack_user_id>'
     """
@@ -113,7 +113,7 @@ class UserIdentity(Base):
     __tablename__ = "user_identity"
     __table_args__ = (
         UniqueConstraint("user_id", "provider", name="uq_user_identity_user_provider"),
-        # Один аккаунт пользователя на провайдера (например, один Mattermost ID)
+        # One user account per provider (for example, one Mattermost ID)
         {"comment": "Provider identities for router users"},
     )
 
@@ -137,13 +137,13 @@ class UserIdentity(Base):
 
 class UserInstance(Base):
     """
-    Активная привязка пользователя к инстансу (1:1).
+    Active user binding to an instance (1:1).
 
-    instance_uuid — PK и FK на instance (1 инстанс = 1 активный юзер)
-    user_id       — UNIQUE FK на app_user (1 юзер = 1 активный инстанс)
+    instance_uuid — PK and FK to instance (1 instance = 1 active user)
+    user_id       — UNIQUE FK to app_user (1 user = 1 active instance)
 
-    Для освобождения инстанса — удалить строку (DELETE).
-    Для переназначения — сначала DELETE, потом INSERT.
+    To free the instance, delete the row (DELETE).
+    To reassign, DELETE first, then INSERT.
     """
 
     __tablename__ = "user_instance"

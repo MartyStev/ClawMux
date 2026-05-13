@@ -117,8 +117,8 @@ class Router:
                 else:
                     await self.mattermost.send_reply(
                         event.channel_id,
-                        "⚠️ Для вашего аккаунта не назначен OpenClaw instance. "
-                        "Обратитесь к администратору.",
+                        "⚠️ No OpenClaw instance is assigned to your account. "
+                        "Please contact the administrator.",
                     )
                 return
         else:
@@ -138,7 +138,7 @@ class Router:
                     attachment_context = build_attachment_context(downloaded)
                     if attachment_context:
                         if not message_text.strip():
-                            message_text = "Пользователь отправил файл(ы) без текста." + attachment_context
+                            message_text = "User attached file(s) without text." + attachment_context
                         else:
                             message_text = message_text + attachment_context
                 except Exception as e:
@@ -250,7 +250,7 @@ class Router:
             ws_errors_total.labels(error_type="routing_error").inc()
             await self.mattermost.send_reply(
                 event.channel_id,
-                "❌ Произошла ошибка при обработке запроса. Попробуйте позже.",
+                "❌ An error occurred while processing the request. Please try again later.",
             )
         finally:
             # Always stop the typing loop once we have a response (or error)
@@ -319,7 +319,7 @@ class Router:
                 messages_total.labels(status="dify_fallback").inc()
             else:
                 log.warning("dify_fallback_empty_response")
-                err_text = "❌ Не удалось получить ответ. Попробуйте позже."
+                err_text = "❌ Unable to get a response. Please try again later."
                 if placeholder_id:
                     await self.mattermost.update_reply(placeholder_id, err_text)
                 else:
@@ -329,7 +329,7 @@ class Router:
         except Exception as e:
             log.error("dify_fallback_error", error=str(e))
             messages_total.labels(status="dify_fallback_error").inc()
-            err_text = "❌ Произошла ошибка при обработке запроса. Попробуйте позже."
+            err_text = "❌ An error occurred while processing the request. Please try again later."
             try:
                 if placeholder_id:
                     await self.mattermost.update_reply(placeholder_id, err_text)
@@ -404,7 +404,7 @@ class Router:
             if channel_id:
                 await self.mattermost.send_reply(
                     channel_id,
-                    "❌ Ошибка при выполнении фоновой задачи.",
+                    "❌ An error occurred while executing the background task.",
                 )
         finally:
             request_duration.observe(time.monotonic() - _t_start)

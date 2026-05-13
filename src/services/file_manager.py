@@ -91,8 +91,8 @@ def build_attachment_context(files: list[DownloadedFile]) -> str:
         for f in files
     ]
     return (
-        "\n\n[СИСТЕМА: Пользователь прикрепил файл(ы). "
-        "Они доступны для чтения по следующим путям:]\n"
+        "\n\n[SYSTEM: the user attached one or more files. "
+        "They are available to read at the following paths:]\n"
         + "\n".join(lines)
     )
 

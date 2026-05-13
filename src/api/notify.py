@@ -3,7 +3,7 @@ WS Router — Notification API.
 
 POST /api/v1/notify
 
-Отправка системного сообщения напрямую пользователю в Mattermost.
+Send a system message directly to a user in Mattermost.
 """
 import asyncio
 
@@ -40,8 +40,8 @@ async def notify(
     x_api_token: str = Header(..., alias="x-api-token"),
 ) -> NotifyResponse:
     """
-    Отправить системное уведомление напрямую пользователю в Mattermost.
-    Находит identity пользователя по external_user_id + provider.
+    Send a system notification directly to a user in Mattermost.
+    Finds the user's identity by external_user_id + provider.
     """
     if not settings.api_token or x_api_token != settings.api_token:
         raise HTTPException(
@@ -74,7 +74,7 @@ async def notify(
 
     log = log.bind(provider_user_id=provider_user_id)
     
-    # Запускаем отправку в фоне, не блокируем ответ API
+    # Launch the send task in the background without blocking the API response
     asyncio.create_task(
         app_router.handle_proactive(
             user_id=provider_user_id,

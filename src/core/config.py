@@ -1,7 +1,7 @@
 """
 WS Router — Configuration.
 
-Все настройки загружаются из переменных окружения (или .env файла).
+All settings are loaded from environment variables (or an .env file).
 """
 
 from pydantic_settings import BaseSettings

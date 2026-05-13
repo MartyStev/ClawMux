@@ -13,7 +13,7 @@ Solution:
     debounce timer (DEBOUNCE_MS) to wait for the stream to settle.
     After the timer fires, _select_best() picks the final message with:
       1. state == "final"
-      2. non-trivial text (len > 5, not a placeholder like "Ок", "thinking...")
+      2. non-trivial text (len > 5, not a placeholder like "Ok", "thinking...")
       3. highest seq number
 
 Architecture:
@@ -38,10 +38,9 @@ logger = structlog.get_logger(__name__)
 
 # Short exact strings that are obviously placeholder-only responses.
 # Must be EXACT short tokens — do NOT put long prefixes here, or you'll
-# filter real answers like "Ок, вот данные..." or "Сейчас проверю..."
+# filter real answers like "Ok, here are the details..." or "I'll check now..."
 _JUNK_EXACT = frozenset({
-    "ок", "ок.", "ok", "ok.",
-    "думаю", "думаю...",
+    "ok", "ok.",
     "thinking", "thinking...",
     "...", "…",
 })

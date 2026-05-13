@@ -304,7 +304,7 @@ class OpenClawClient:
                 # The future itself is cleared only in the finally block AFTER we've
                 # recorded the timed-out msg_id for late-arrival detection.
                 self._timed_out_msg_id = msg_id
-                return "[Timeout: OpenClaw не ответил в течение отведённого времени]", []
+                return "[Timeout: OpenClaw did not respond within the allotted time]", []
             except OpenClawConnectionError:
                 # WS dropped mid-request (listen_loop set exception on the future).
                 # Re-raise so ws_manager.send_message triggers reconnect + retry.
@@ -405,7 +405,7 @@ class OpenClawClient:
                 error = parsed.get("error", "unknown")
                 self._log.error("chat_send_rejected", error=error)
                 if self._pending_future is not None and not self._pending_future.done():
-                    self._pending_future.set_result(f"[Ошибка: {error}]")
+                    self._pending_future.set_result(f"[Error: {error}]")
                 self._active_msg_id = None
                 self._pending_future = None
                 self._pending_future_msg_id = None
@@ -439,9 +439,9 @@ class OpenClawClient:
                         # Preserve any text that was already generated before the crash
                         existing_text = self._agent_texts.get(run_id, "")
                         if existing_text:
-                            final_text = f"{existing_text}\n\n⚠️ **Сбой генерации:** {error_msg}"
+                            final_text = f"{existing_text}\n\n⚠️ **Generation failure:** {error_msg}"
                         else:
-                            final_text = f"[Ошибка LLM: {error_msg}]"
+                            final_text = f"[LLM error: {error_msg}]"
                             
                         self._pending_future.set_result((final_text, []))
 
