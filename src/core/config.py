@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # ── Mattermost ────────────────────────────────────────────────
     mattermost_url: str = Field(
-        default="https://mattermost.homeapp.team",
+        default="https://mattermost.example.com",
         description="Mattermost server URL (without trailing slash)",
     )
     mattermost_token: str = Field(
@@ -79,10 +79,17 @@ class Settings(BaseSettings):
         default="",
         description="Secret token for POST /api/v1/trigger (X-Api-Token header). Empty = endpoint disabled.",
     )
+    mm_action_proxy_url: str = Field(
+        default="http://tools-server:3000/mm/action",
+        description=(
+            "Internal endpoint used by /api/v1/mm/action proxy for Mattermost "
+            "interactive buttons."
+        ),
+    )
 
     # ── Dify Fallback Bot ─────────────────────────────────────────────────────────
     dify_base_url: str = Field(
-        default="http://dify.homeapp.team/v1",
+        default="http://localhost:8081/v1",
         description="Dify Chat API base URL (without trailing slash).",
     )
     dify_api_key: str = Field(

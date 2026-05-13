@@ -19,7 +19,7 @@ from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Header, HTTPException, Request, status
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from src.core.config import settings
 from src.services.mapping import InstanceNotFoundError
@@ -36,17 +36,6 @@ class TriggerRequest(BaseModel):
     external_user_id: str
     text: str
     session_key: Optional[str] = None  # default: "agent:main:main"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _alias_legacy_crm_user_id(cls, data):
-        """
-        Backward compatibility: accept old payload key `crm_user_id`.
-        """
-        if isinstance(data, dict):
-            if "external_user_id" not in data and "crm_user_id" in data:
-                data["external_user_id"] = data["crm_user_id"]
-        return data
 
 
 class TriggerResponse(BaseModel):

@@ -11,6 +11,8 @@ import httpx
 import structlog
 from fastapi import APIRouter, Request, HTTPException
 
+from src.core.config import settings
+
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["mattermost"])
@@ -38,7 +40,7 @@ async def proxy_mm_action(request: Request):
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                "http://homeapp_tools:3000/mm/action", 
+                settings.mm_action_proxy_url,
                 json=payload, 
                 timeout=10.0
             )

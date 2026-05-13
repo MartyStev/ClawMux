@@ -6,7 +6,6 @@ POST /api/v1/notify
 Отправка системного сообщения напрямую пользователю в Mattermost.
 """
 import asyncio
-from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Header, HTTPException, Request, status
@@ -20,7 +19,7 @@ router = APIRouter(prefix="/api/v1", tags=["control-plane"])
 
 
 class NotifyRequest(BaseModel):
-    crm_user_id: str
+    external_user_id: str
     text: str
 
 
@@ -36,7 +35,7 @@ async def notify(
 ) -> NotifyResponse:
     """
     Отправить системное уведомление напрямую пользователю в Mattermost.
-    Находит Mattermost user_id по переданному crm_user_id.
+    Находит Mattermost user_id по переданному external_user_id.
     """
     if not settings.api_token or x_api_token != settings.api_token:
         raise HTTPException(
@@ -44,18 +43,18 @@ async def notify(
             detail="Invalid or missing API token",
         )
 
-    log = logger.bind(crm_user_id=req.crm_user_id)
+    log = logger.bind(external_user_id=req.external_user_id)
     
     mapping = request.app.state.mapping
     app_router = request.app.state.router
 
     try:
-        mm_user_id, _ = await mapping.get_instance_by_crm_id(req.crm_user_id)
+        mm_user_id, _ = await mapping.get_instance_by_external_id(req.external_user_id)
     except Exception as e:
-        log.warning("notify_crm_user_not_found", error=str(e))
+        log.warning("notify_external_user_not_found", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No mapping for crm_user_id={req.crm_user_id!r}",
+            detail=f"No mapping for external_user_id={req.external_user_id!r}",
         )
 
     log = log.bind(mm_user_id=mm_user_id)

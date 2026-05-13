@@ -33,7 +33,7 @@ class DifyClient:
     def __init__(self, base_url: str, api_key: str, timeout_sec: int = 120):
         """
         Args:
-            base_url: Dify API base URL, e.g. ``http://dify.homeapp.team/v1``
+            base_url: Dify API base URL, e.g. ``http://localhost:8081/v1``
             api_key:  Dify application API key (Bearer token).
             timeout_sec: Max seconds to wait for the full streamed response.
         """
