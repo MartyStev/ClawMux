@@ -1,26 +1,26 @@
 # Control-Plane API
 
-## Назначение
+## Purpose
 
-Control-Plane API позволяет внешним системам отправлять задачи и уведомления пользователям OpenClaw через роутер.
+The Control-Plane API allows external systems to send tasks and notifications to OpenClaw users through the router.
 
-Базовый URL:
+Base URL:
 
 ```text
 http://<router-host>:8060/api/v1
 ```
 
-Аутентификация для всех эндпоинтов:
+Authentication for all endpoints:
 
 ```text
 X-Api-Token: <API_TOKEN>
 ```
 
-`API_TOKEN` задаётся в `.env`.
+The `API_TOKEN` is configured in `.env`.
 
 ## 1) POST /trigger
 
-Асинхронно отправляет задачу пользователю. Ответ `200` означает, что задача принята роутером и поставлена в обработку.
+Asynchronously sends a task to a user. A `200` response means the router accepted the task and queued it for processing.
 
 ### Request
 
@@ -28,17 +28,17 @@ X-Api-Token: <API_TOKEN>
 {
   "external_user_id": "user-ext-123",
   "provider": "mattermost",
-  "text": "Сделай краткий отчёт по продажам",
+  "text": "Create a short sales report",
   "session_key": "agent:main:main"
 }
 ```
 
-Поля:
+Fields:
 
-- `external_user_id` (string, required): внешний идентификатор пользователя из вашей системы
-- `provider` (string, optional): провайдер канала, по умолчанию `mattermost`
-- `text` (string, required): текст задачи
-- `session_key` (string, optional): ключ сессии OpenClaw
+- `external_user_id` (string, required): external identifier of the user in your system
+- `provider` (string, optional): channel provider, defaults to `mattermost`
+- `text` (string, required): task text
+- `session_key` (string, optional): OpenClaw session key
 
 ### Response 200
 
@@ -51,7 +51,7 @@ X-Api-Token: <API_TOKEN>
 
 ## 2) POST /notify
 
-Отправляет системное уведомление пользователю.
+Sends a system notification directly to a user.
 
 ### Request
 
@@ -59,7 +59,7 @@ X-Api-Token: <API_TOKEN>
 {
   "external_user_id": "user-ext-123",
   "provider": "mattermost",
-  "text": "Напоминание: дейли через 10 минут"
+  "text": "Reminder: daily stand-up in 10 minutes"
 }
 ```
 
@@ -71,21 +71,21 @@ X-Api-Token: <API_TOKEN>
 }
 ```
 
-## Коды ошибок
+## Error codes
 
-- `401 Unauthorized`: неверный или отсутствующий `X-Api-Token`
-- `404 Not Found`: не найден маппинг пользователя
-- `400 Bad Request`: провайдер канала не включён
-- `422 Unprocessable Entity`: невалидное тело запроса
+- `401 Unauthorized`: invalid or missing `X-Api-Token`
+- `404 Not Found`: user mapping not found
+- `400 Bad Request`: provider is not enabled
+- `422 Unprocessable Entity`: invalid request body
 
-## Пример `curl`
+## Example `curl`
 
 ```bash
 curl -X POST http://localhost:8060/api/v1/trigger \
   -H "X-Api-Token: change-me-to-a-strong-secret" \
   -H "Content-Type: application/json" \
-  -d '{"external_user_id":"user-ext-123","provider":"mattermost","text":"Сделай отчёт"}'
+  -d '{"external_user_id":"user-ext-123","provider":"mattermost","text":"Create a report"}'
 ```
 
 
-Важно: multi-channel структура уже есть в БД, но в runtime включён только `mattermost`.
+Important: the multi-channel structure already exists in the database, but only `mattermost` is enabled at runtime.
