@@ -405,7 +405,7 @@ class OpenClawClient:
                 error = parsed.get("error", "unknown")
                 self._log.error("chat_send_rejected", error=error)
                 if self._pending_future is not None and not self._pending_future.done():
-                    self._pending_future.set_result(f"[Error: {error}]")
+                    self._pending_future.set_result((f"[Error: {error}]", []))
                 self._active_msg_id = None
                 self._pending_future = None
                 self._pending_future_msg_id = None

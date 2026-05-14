@@ -94,7 +94,7 @@ class DifyClient:
         except asyncio.TimeoutError:
             log.error("dify_timeout", timeout_sec=self._timeout)
             return ""
-        except Exception as exc:
+        except httpx.HTTPError as exc:
             log.error("dify_error", error=str(exc))
             return ""
 

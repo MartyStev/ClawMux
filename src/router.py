@@ -11,6 +11,7 @@ the user has not sent a message recently.
 """
 
 import asyncio
+import httpx
 import random
 import time
 from typing import Dict, Optional
@@ -141,7 +142,7 @@ class Router:
                             message_text = "User attached file(s) without text." + attachment_context
                         else:
                             message_text = message_text + attachment_context
-                except Exception as e:
+                except (OSError, httpx.HTTPError) as e:
                     log.warning("attachment_download_failed", error=str(e))
             else:
                 log.warning("attachment_uuid_not_found", instance_url=info.instance_url)
@@ -170,7 +171,7 @@ class Router:
             placeholder_id = await self.mattermost.send_reply(
                 event.channel_id, placeholder_text
             )
-        except Exception as e:
+        except httpx.HTTPError as e:
             log.warning("failed_to_create_placeholder", error=str(e))
 
         # Start a background task that sends 'typing...' every 4s.
@@ -295,7 +296,7 @@ class Router:
             placeholder_id = await self.mattermost.send_reply(
                 event.channel_id, placeholder_text
             )
-        except Exception as e:
+        except httpx.HTTPError as e:
             log.warning("dify_fallback_placeholder_failed", error=str(e))
 
         typing_task = asyncio.create_task(

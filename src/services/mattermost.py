@@ -240,9 +240,7 @@ class MattermostClient:
             message:    Text to send.
             root_id:    If set, creates a threaded reply to that post ID.
 
-        Uses asyncio.to_thread() because mattermostdriver uses the
-        synchronous `requests` library under the hood — calling it
-        directly would block the entire asyncio event loop.
+        Uses the Mattermost HTTP API via the async HTTP client.
         """
         try:
             post_body: dict = {"channel_id": channel_id, "message": message}
@@ -258,7 +256,7 @@ class MattermostClient:
                 post_id=post.get("id"),
             )
             return post.get("id", "")
-        except Exception as e:
+        except httpx.HTTPError as e:
             logger.error(
                 "mattermost_reply_error",
                 channel_id=channel_id,
@@ -303,7 +301,7 @@ class MattermostClient:
                 post_id=post_id,
             )
             return post_id
-        except Exception as e:
+        except httpx.HTTPError as e:
             logger.error(
                 "mattermost_post_with_files_error",
                 channel_id=channel_id,
@@ -322,7 +320,7 @@ class MattermostClient:
             post_body = {"id": post_id, "message": message}
             resp = await self._http_client.put(f"/posts/{post_id}", json=post_body)
             resp.raise_for_status()
-        except Exception as e:
+        except httpx.HTTPError as e:
             logger.warning("mattermost_update_error", post_id=post_id, error=str(e))
 
     async def get_or_create_dm_channel(self, user_id: str) -> str:
@@ -334,7 +332,7 @@ class MattermostClient:
             resp.raise_for_status()
             channel = resp.json()
             return channel.get("id", "")
-        except Exception as e:
+        except httpx.HTTPError as e:
             logger.error("mattermost_dm_create_error", user_id=user_id, error=str(e))
             return ""
 

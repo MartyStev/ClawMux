@@ -134,7 +134,7 @@ class FileManager:
                 downloaded = await self._download_one(file_id, host_dir, max_bytes)
                 if downloaded:
                     results.append(downloaded)
-            except Exception as e:
+            except httpx.HTTPError as e:
                 self._log.warning(
                     "attachment_download_error",
                     file_id=file_id,
@@ -185,7 +185,7 @@ class FileManager:
         # Make file readable/writable by everyone so container can access it
         try:
             os.chmod(host_path, 0o666)
-        except Exception as e:
+        except OSError as e:
             self._log.warning("chmod_failed", error=str(e))
 
         container_path = (
@@ -254,7 +254,7 @@ class FileManager:
                 channel_id=channel_id,
             )
             return file_id
-        except Exception as e:
+        except httpx.HTTPError as e:
             self._log.error(
                 "attachment_upload_error",
                 host_path=host_path,
