@@ -27,18 +27,20 @@ echo "   ✅ Docker is available"
 # Check 3: OpenClaw image
 echo ""
 echo "3️⃣  Checking OpenClaw Docker image..."
-if docker image inspect openclawai/openclaw:latest &> /dev/null; then
+OPENCLAW_IMAGE=${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+echo "   ℹ️  Expected OpenClaw image: $OPENCLAW_IMAGE"
+if docker image inspect "$OPENCLAW_IMAGE" &> /dev/null; then
     echo "   ✅ OpenClaw image found locally"
 else
     echo "   ⚠️  OpenClaw image not found locally"
     echo "   Attempting to pull from registry..."
-    if docker pull openclawai/openclaw:latest 2>&1 | grep -q "Digest:"; then
+    if docker pull "$OPENCLAW_IMAGE" 2>&1 | grep -q "Digest:"; then
         echo "   ✅ OpenClaw image pulled successfully"
     else
         echo "   ⚠️  Could not pull OpenClaw image from registry"
-        echo "   You may need to build it manually:"
-        echo "   git clone https://github.com/openclawai/openclaw-core.git"
-        echo "   docker build -t openclawai/openclaw:latest ."
+        echo "   Use one of these options:"
+        echo "   1) Set OPENCLAW_IMAGE to a valid image, e.g. ghcr.io/openclaw/openclaw:latest"
+        echo "   2) If you have a local OpenClaw source tree, set OPENCLAW_SRC=/path/to/source and rerun this script"
     fi
 fi
 

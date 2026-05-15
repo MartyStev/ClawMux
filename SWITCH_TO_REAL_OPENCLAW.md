@@ -13,23 +13,22 @@
 
 ## 🚀 Установка реального OpenClaw
 
-### Шаг 1: Построить OpenClaw образ
+### Шаг 1: Получить OpenClaw образ
 
-**Вариант A: Автоматическое построение**
+**Вариант A: Использовать публичный образ**
 ```bash
+export OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
 ./setup-openclaw.sh
 ```
 
-**Вариант B: Ручное построение**
+**Вариант B: Построить из локального источника**
 ```bash
-# Клонировать репозиторий
-git clone https://github.com/openclawai/openclaw-core.git
-cd openclaw-core
-
-# Построить образ
-docker build -t openclawai/openclaw:latest .
+export OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
+export OPENCLAW_SRC=/path/to/openclaw-source
+./setup-openclaw.sh
 ```
 
+Если у вас уже есть действительный образ, вы можете просто задать `OPENCLAW_IMAGE` и запустить `docker compose -f docker-compose.prod.yml up -d`.
 ### Шаг 2: Проверить, что LM Studio работает
 
 ```bash

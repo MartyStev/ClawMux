@@ -52,9 +52,8 @@ services:
 
   openclaw:
     # Real OpenClaw instance configured with LM Studio
-    # Requires: openclawai/openclaw:latest image built from source
-    # Build with: ./setup-openclaw.sh
-    image: openclawai/openclaw:latest
+    # Uses GHCR by default; override with OPENCLAW_IMAGE if needed
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
     container_name: ws_router_openclaw
     environment:
       # LLM Configuration

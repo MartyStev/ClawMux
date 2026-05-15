@@ -12,17 +12,20 @@ curl http://127.0.0.1:1234/v1/models
 ```
 
 ### 2. OpenClaw Docker Image
-Получите OpenClaw образ:
+OpenClaw можно получить напрямую из GitHub Container Registry или сборкой из локального источника:
 ```bash
-# Option 1: Build from source
-git clone https://github.com/openclawai/openclaw-core.git
-cd openclaw-core
-docker build -t openclawai/openclaw:latest .
+# Option 1: Pull from registry
+docker pull ghcr.io/openclaw/openclaw:latest
 
-# Option 2: Pull from registry (if available)
-docker pull openclawai/openclaw:latest
+# Option 2: Build from local source (if you have it)
+# Set OPENCLAW_SRC to the directory containing the OpenClaw Dockerfile
+OPENCLAW_SRC=/path/to/openclaw-source docker build -t ghcr.io/openclaw/openclaw:latest "$OPENCLAW_SRC"
 ```
 
+Если вы используете кастомный образ, установите переменную:
+```bash
+export OPENCLAW_IMAGE=your-registry/openclaw:tag
+```
 ## Deployment
 
 ### Step 1: Start LM Studio on Host
