@@ -44,8 +44,8 @@ services:
     container_name: ws_router_lmstudio_proxy
     volumes:
       - ./nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
-    ports:
-      - "127.0.0.1:1234:1234"
+    # Do not bind host port 1234: LM Studio already runs on host:1234.
+    # Proxy is only needed inside docker network as lmstudio-proxy:1234.
     restart: unless-stopped
     networks:
       - backend
@@ -69,7 +69,10 @@ services:
       # Database - Creates openclaw database if not exists
       DATABASE_URL: postgresql://router:router@postgres:5432/openclaw
     ports:
-      - "127.0.0.1:19000:8080"
+      - "127.0.0.1:19000:18789"
+    volumes:
+      # Persist OpenClaw runtime config and identity across recreate/restart.
+      - openclaw_state:/home/node/.openclaw
     depends_on:
       postgres:
         condition: service_healthy
@@ -110,3 +113,4 @@ volumes:
   mattermost_data:
   mattermost_logs:
   mattermost_config:
+  openclaw_state:

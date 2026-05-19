@@ -1,9 +1,23 @@
 #!/bin/bash
 # Test message routing through ClawMux
 
-# Your Mattermost user ID
-EXTERNAL_USER_ID="b7tau3ictbrfpfbj6zo314r6nr"
 API_TOKEN="${API_TOKEN:-change-me-to-a-strong-secret}"
+
+# Pick mapped external_user_id from DB unless explicitly provided.
+EXTERNAL_USER_ID="${EXTERNAL_USER_ID:-}"
+if [ -z "$EXTERNAL_USER_ID" ]; then
+  EXTERNAL_USER_ID="$(
+    docker compose exec -T postgres psql -U router -d ws_router -Atc \
+      "SELECT external_user_id FROM app_user WHERE external_user_id IS NOT NULL ORDER BY created_at DESC LIMIT 1;"
+  )"
+fi
+
+if [ -z "$EXTERNAL_USER_ID" ]; then
+  echo "No mapped external_user_id found in app_user."
+  echo "Run onboarding first, for example:"
+  echo "  scripts/onboard_user.sh --app-user-id ... --external-user-id ... --provider-user-id ... --instance-uuid ..."
+  exit 1
+fi
 
 echo "=== Testing ClawMux Message Routing ==="
 echo "User ID: $EXTERNAL_USER_ID"

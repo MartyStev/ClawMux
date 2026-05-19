@@ -182,8 +182,27 @@ class OpenClawClient:
         Raises OpenClawConnectionError on failure.
         """
         try:
+            missing = []
+            if not self.credentials.device_id.strip():
+                missing.append("device_id")
+            if not self.credentials.public_key_b64.strip():
+                missing.append("public_key_b64")
+            if not self.credentials.private_key_b64.strip():
+                missing.append("private_key_b64")
+            if not self.credentials.device_token.strip():
+                missing.append("device_token")
+            if not self.gateway_token.strip():
+                missing.append("gateway_token")
+            if missing:
+                raise OpenClawConnectionError(
+                    "Instance credentials are incomplete in DB "
+                    f"(missing: {', '.join(missing)})."
+                )
+
             self._log.info("connecting")
             origin = self.instance_url.replace("ws://", "http://").replace("/ws", "")
+            if origin.startswith("http://openclaw:18789"):
+                origin = "http://127.0.0.1:18789"
             self._ws = await websockets.connect(
                 self.instance_url,
                 additional_headers={"Origin": origin},
@@ -207,8 +226,8 @@ class OpenClawClient:
                 "id": str(uuid.uuid4()),
                 "method": "connect",
                 "params": {
-                    "minProtocol": 3,
-                    "maxProtocol": 3,
+                    "minProtocol": 4,
+                    "maxProtocol": 4,
                     "client": identity["client"],
                     "role": identity["role"],
                     "scopes": identity["scopes"],

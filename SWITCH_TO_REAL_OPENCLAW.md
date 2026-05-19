@@ -41,7 +41,7 @@ curl http://127.0.0.1:1234/v1/models | jq .
 ### Шаг 3: Остановить текущую систему
 
 ```bash
-docker compose down
+docker compose down --remove-orphans
 ```
 
 ### Шаг 4: Запустить с реальным OpenClaw
@@ -53,23 +53,40 @@ docker compose -f docker-compose.prod.yml up -d
 # Или с флагом --build если нужно пересобрать образы
 docker compose -f docker-compose.prod.yml up -d --build
 ```
+В `docker-compose.prod.yml` добавлен persistent volume `openclaw_state:/home/node/.openclaw`,
+поэтому конфигурация и identity OpenClaw не теряются после `recreate`.
 
 ### Шаг 5: Обновить конфигурацию БД
 
 ```bash
-# Найти instance_uuid OpenClaw
-docker compose -f docker-compose.prod.yml logs openclaw | grep -i instance
+# Пример UUID, используемый в этом проекте:
+OPENCLAW_INSTANCE_UUID="2f99d082-71fb-4bf7-a4c5-cfeea78976c6"
 
-# Обновить маппинг (замените instance_uuid если нужно)
-docker compose -f docker-compose.prod.yml exec -T postgres psql -U router -d ws_router << 'EOF'
-UPDATE instance 
-SET instance_url = 'ws://openclaw:19000'
-WHERE instance_uuid = '2f99d082-71fb-4bf7-a4c5-cfeea78976c6';
-EOF
+# Gateway token (смотрите в /home/node/.openclaw/openclaw.json внутри openclaw)
+GATEWAY_TOKEN="test-gateway-token-001"
 
-# Перезапустить ws-router
-docker compose -f docker-compose.prod.yml restart ws-router
+# Важно: регистрируем не только instance_url, но и device credentials:
+scripts/register_real_openclaw_instance.sh \
+  --instance-uuid "$OPENCLAW_INSTANCE_UUID" \
+  --gateway-token "$GATEWAY_TOKEN" \
+  --instance-url ws://openclaw:18789/ws
+
+# Сгенерировать pending pairing (любой trigger/сообщение), затем:
+docker compose -f docker-compose.prod.yml exec -T openclaw \
+  openclaw devices approve --latest --json
 ```
+
+### Шаг 6: Зафиксировать runtime-настройки OpenClaw
+```bash
+./scripts/configure_openclaw_runtime.sh
+```
+Скрипт фиксирует runtime `pi`, provider `lmstudio` и API `openai-responses`.
+Default model: `lmstudio/qwen3.5-9b`.
+После запуска скрипта используйте тот же `gateway-token` в
+`scripts/register_real_openclaw_instance.sh`, затем подтвердите pairing.
+Это устраняет типовые ошибки:
+- `Requested agent harness "codex" is not registered`
+- `SsrFBlockedError` при `openai-completions` и `lmstudio-proxy`
 
 ## 🧪 Тестирование
 
@@ -144,21 +161,26 @@ docker compose -f docker-compose.prod.yml exec lmstudio-proxy \
 # Проверить логи OpenClaw
 docker compose -f docker-compose.prod.yml logs openclaw | grep -i "llm\|error"
 ```
+Если в LM Studio логе есть `model_load_failed`/`insufficient system resources`,
+выберите более легкую модель или уменьшите требования (квант/контекст/память).
 
 ### Проблема: WS Router не может подключиться к OpenClaw
 
 ```bash
 # Проверить что OpenClaw слушает на порту
 docker compose -f docker-compose.prod.yml exec openclaw \
-  netstat -tlnp | grep 19000
+  sh -lc "echo 'use ws-router-side probe instead'"
 
 # Проверить logs
 docker compose -f docker-compose.prod.yml logs openclaw
 
 # Тестировать WS подключение
 docker compose -f docker-compose.prod.yml exec ws-router \
-  python -c "import asyncio; import websockets; \
-  asyncio.run(websockets.connect('ws://openclaw:19000'))"
+  python -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('openclaw',18789)); print('OK openclaw:18789')"
+```
+Если есть ошибка `Requested agent harness "codex" is not registered`, выполните:
+```bash
+./scripts/configure_openclaw_runtime.sh
 ```
 
 ### Проблема: Модель не загружена в LM Studio

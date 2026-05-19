@@ -47,7 +47,7 @@ fi
 # Check 4: Port availability
 echo ""
 echo "4️⃣  Checking port availability..."
-declare -a PORTS=(8065 8060 19000 1234 5432)
+declare -a PORTS=(8065 8060 19000 5432)
 for port in "${PORTS[@]}"; do
     if nc -z 127.0.0.1 $port 2>/dev/null; then
         echo "   ⚠️  Port $port is already in use"
@@ -55,6 +55,7 @@ for port in "${PORTS[@]}"; do
         echo "   ✅ Port $port is available"
     fi
 done
+echo "   ℹ️  Port 1234 should be occupied by LM Studio on host (this is expected)"
 
 # Check 5: .env
 echo ""
@@ -71,7 +72,8 @@ fi
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║  Ready to start! Run:                                           ║"
-echo "║  docker compose up -d --build                                   ║"
+echo "║  docker compose down --remove-orphans                           ║"
+echo "║  docker compose -f docker-compose.prod.yml up -d --build        ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Configuration summary:"
@@ -85,3 +87,6 @@ echo "After startup, run tests:"
 echo "  ./test_integration.sh   # Full system test"
 echo "  ./test_routing.sh       # Message routing test"
 echo "  docker compose logs -f ws-router  # Monitor logs"
+echo ""
+echo "For real OpenClaw stack, apply runtime defaults once:"
+echo "  ./scripts/configure_openclaw_runtime.sh"

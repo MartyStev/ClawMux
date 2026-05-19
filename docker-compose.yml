@@ -5,7 +5,7 @@
 # - PostgreSQL на :5432
 # - Mattermost на http://localhost:8065 (admin/admin123)
 # - Mock OpenClaw WS на ws://localhost:18789
-# - LM Studio прокси на http://localhost:1234
+# - LM Studio прокси только внутри Docker-сети (lmstudio-proxy:1234)
 # - WS Router на http://localhost:8060
 #
 # Для использования реального OpenClaw с LM Studio:
@@ -80,7 +80,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://router:router@postgres:5432/ws_router
-      MATTERMOST_URL: http://mattermost:8061
+      MATTERMOST_URL: http://mattermost:8065
     depends_on:
       postgres:
         condition: service_healthy

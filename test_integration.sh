@@ -13,12 +13,27 @@ curl -s http://localhost:8065/api/v4/system/ping | jq -r '.status' || echo "FAIL
 echo "3. Checking PostgreSQL..."
 docker compose exec -T postgres pg_isready -U router -d ws_router >/dev/null && echo "OK" || echo "FAILED"
 
-echo "4. Checking OpenClaw mock..."
-# Simple WS test - just check if port is open
-nc -z localhost 18789 && echo "OK" || echo "FAILED"
+echo "4. Checking OpenClaw endpoint from ws-router..."
+docker compose exec -T ws-router python - <<'PY'
+import socket
+for host, port in [("openclaw-mock", 18789), ("openclaw", 18789)]:
+    s = socket.socket()
+    s.settimeout(2)
+    try:
+        s.connect((host, port))
+        print(f"OK ({host}:{port})")
+        raise SystemExit(0)
+    except Exception:
+        pass
+    finally:
+        s.close()
+print("FAILED (no OpenClaw endpoint reachable on :18789)")
+raise SystemExit(1)
+PY
 
 echo "=== Test Complete ==="
 echo "For manual testing:"
 echo "- Mattermost: http://localhost:8065 (admin@example.com / admin123)"
 echo "- WS Router API: http://localhost:8060"
-echo "- OpenClaw mock WS: ws://localhost:18789"
+echo "- OpenClaw mock WS: ws://localhost:18789 (default compose)"
+echo "- OpenClaw real WS (docker network): ws://openclaw:18789/ws"
