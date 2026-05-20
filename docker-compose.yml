@@ -9,7 +9,7 @@
 # - WS Router на http://localhost:8060
 #
 # Для использования реального OpenClaw с LM Studio:
-# 1. ./setup-openclaw.sh (to build the image)
+# 1. ./scripts/setup-openclaw.sh (to build the image)
 # 2. docker compose -f docker-compose.prod.yml up -d
 #
 # Для тестирования: cp .env.example .env && docker compose up -d --build
@@ -56,7 +56,7 @@ services:
     image: nginx:alpine
     container_name: ws_router_lmstudio_proxy
     volumes:
-      - ./nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
     restart: unless-stopped
     networks:
       - backend
@@ -64,7 +64,7 @@ services:
   openclaw-mock:
     build:
       context: .
-      dockerfile: Dockerfile.mock
+      dockerfile: docker/Dockerfile.mock
     container_name: ws_router_openclaw_mock
     ports:
       - "127.0.0.1:18789:18789"

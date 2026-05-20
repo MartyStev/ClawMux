@@ -24,12 +24,12 @@ curl http://localhost:8060/health | jq
 
 ### Full Integration Test
 ```bash
-./test_integration.sh
+./scripts/test_integration.sh
 ```
 
 ### Message Routing Test
 ```bash
-./test_routing.sh
+./scripts/test_routing.sh
 ```
 
 ## API Endpoints
@@ -121,9 +121,9 @@ Check Mattermost bot token is correct and bot has channel permissions
 ## Files Created
 
 - `docker-compose.yml` - Full stack with services
-- `Dockerfile.mock` - Mock OpenClaw server
-- `mock_openclaw.py` - Mock implementation
-- `test_integration.sh` - Full integration test
-- `test_routing.sh` - API routing test
+- `docker/Dockerfile.mock` - Mock OpenClaw server
+- `scripts/mock_openclaw.py` - Mock implementation
+- `scripts/test_integration.sh` - Full integration test
+- `scripts/test_routing.sh` - API routing test
 - `.env` - Configuration with your bot token
 - `.env.example` - Template for new setups

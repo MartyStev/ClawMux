@@ -26,7 +26,7 @@ To use a real OpenClaw instance with LM Studio:
 
 1. **Build or get OpenClaw Docker image:**
    ```bash
-   ./setup-openclaw.sh
+   ./scripts/setup-openclaw.sh
    ```
 
 2. **Stop current system:**
@@ -46,12 +46,12 @@ To use a real OpenClaw instance with LM Studio:
 
 ### Quick Test
 ```bash
-./test_routing.sh
+./scripts/test_routing.sh
 ```
 
 ### Full Integration Test
 ```bash
-./test_integration.sh
+./scripts/test_integration.sh
 ```
 
 ### Check LM Studio Connectivity
@@ -68,14 +68,14 @@ docker compose exec lmstudio-proxy curl http://host.docker.internal:1234/v1/mode
 ### Configuration
 - `docker-compose.yml` — Main compose with mock OpenClaw + LM Studio proxy
 - `docker-compose.prod.yml` — Production compose with real OpenClaw
-- `nginx-lmstudio.conf` — Nginx config for LM Studio proxy
+- `docker/nginx-lmstudio.conf` — Nginx config for LM Studio proxy
 - `.env` — Your configuration with bot token
 
 ### Scripts
-- `preflight-check.sh` — Pre-flight checks before deployment
-- `setup-openclaw.sh` — Script to build OpenClaw image
-- `test_integration.sh` — Full system integration test
-- `test_routing.sh` — API routing test
+- `scripts/preflight-check.sh` — Pre-flight checks before deployment
+- `scripts/setup-openclaw.sh` — Script to build OpenClaw image
+- `scripts/test_integration.sh` — Full system integration test
+- `scripts/test_routing.sh` — API routing test
 
 ### Documentation
 - `SETUP_COMPLETE.md` — Complete setup guide (previous)
@@ -153,8 +153,8 @@ docker compose ps
 docker compose logs ws-router --tail 20
 
 # Testing
-./test_integration.sh
-./test_routing.sh
+./scripts/test_integration.sh
+./scripts/test_routing.sh
 
 # LM Studio Check
 curl http://127.0.0.1:1234/v1/models | jq '.data[] | .id'
@@ -186,7 +186,7 @@ docker compose down -v
 
 ### OpenClaw Integration
 - Requires official OpenClaw source code
-- Build locally with: `./setup-openclaw.sh`
+- Build locally with: `./scripts/setup-openclaw.sh`
 - Update instance URL in PostgreSQL after building
 - WS connection: `ws://openclaw:19000`
 
@@ -238,7 +238,7 @@ The system is fully operational with LM Studio integration. You can now:
 4. ✅ Integrate LLM responses via LM Studio
 
 ### Next Steps:
-- [ ] Test message routing with ./test_routing.sh
+- [ ] Test message routing with ./scripts/test_routing.sh
 - [ ] Verify LM Studio connectivity
 - [ ] Review SWITCH_TO_REAL_OPENCLAW.md
 - [ ] Plan migration to real OpenClaw

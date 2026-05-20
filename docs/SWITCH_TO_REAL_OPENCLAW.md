@@ -1,106 +1,107 @@
-# Переключение на реальный OpenClaw с LM Studio
+# Switch to Real OpenClaw with LM Studio
 
-## 📋 Текущая конфигурация
+## 📋 Current configuration
 
-Система работает с **Mock OpenClaw** для тестирования. Чтобы использовать реальный OpenClaw с LM Studio, выполните эти шаги:
+The system is running with **Mock OpenClaw** for testing. To use a real OpenClaw with LM Studio, follow these steps:
 
-## ✅ Требования
+## ✅ Requirements
 
-- ✔️ LM Studio запущен на `http://127.0.0.1:1234`
-- ✔️ Модель `qwen/qwen3.5-9b` загружена в LM Studio
-- ✔️ Docker установлен
-- ✔️ Git установлен
+- ✔️ LM Studio is running at `http://127.0.0.1:1234`
+- ✔️ The model `qwen/qwen3.5-9b` is loaded in LM Studio
+- ✔️ Docker is installed
+- ✔️ Git is installed
 
-## 🚀 Установка реального OpenClaw
+## 🚀 Install real OpenClaw
 
-### Шаг 1: Получить OpenClaw образ
+### Step 1: Get the OpenClaw image
 
-**Вариант A: Использовать публичный образ**
+**Option A: Use the public image**
 ```bash
 export OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
-./setup-openclaw.sh
+./scripts/setup-openclaw.sh
 ```
 
-**Вариант B: Построить из локального источника**
+**Option B: Build from local source**
 ```bash
 export OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
 export OPENCLAW_SRC=/path/to/openclaw-source
-./setup-openclaw.sh
+./scripts/setup-openclaw.sh
 ```
 
-Если у вас уже есть действительный образ, вы можете просто задать `OPENCLAW_IMAGE` и запустить `docker compose -f docker-compose.prod.yml up -d`.
-### Шаг 2: Проверить, что LM Studio работает
+If you already have a valid image, you can simply set `OPENCLAW_IMAGE` and run `docker compose -f docker-compose.prod.yml up -d`.
+
+### Step 2: Verify that LM Studio is running
 
 ```bash
-# Убедиться, что LM Studio слушает на 127.0.0.1:1234
+# Make sure LM Studio is listening on 127.0.0.1:1234
 curl http://127.0.0.1:1234/v1/models | jq .
 
-# Должны увидеть модель qwen в ответе
+# You should see the qwen model in the response
 ```
 
-### Шаг 3: Остановить текущую систему
+### Step 3: Stop the current system
 
 ```bash
 docker compose down --remove-orphans
 ```
 
-### Шаг 4: Запустить с реальным OpenClaw
+### Step 4: Start with real OpenClaw
 
 ```bash
-# Использовать production compose файл
+# Use the production compose file
 docker compose -f docker-compose.prod.yml up -d
 
-# Или с флагом --build если нужно пересобрать образы
+# Or use --build if you need to rebuild images
 docker compose -f docker-compose.prod.yml up -d --build
 ```
-В `docker-compose.prod.yml` добавлен persistent volume `openclaw_state:/home/node/.openclaw`,
-поэтому конфигурация и identity OpenClaw не теряются после `recreate`.
 
-### Шаг 5: Обновить конфигурацию БД
+The `docker-compose.prod.yml` adds a persistent volume `openclaw_state:/home/node/.openclaw`, so OpenClaw configuration and identity are not lost after recreate.
+
+### Step 5: Update the database configuration
 
 ```bash
-# Пример UUID, используемый в этом проекте:
+# Example UUID used in this project:
 OPENCLAW_INSTANCE_UUID="2f99d082-71fb-4bf7-a4c5-cfeea78976c6"
 
-# Gateway token (смотрите в /home/node/.openclaw/openclaw.json внутри openclaw)
+# Gateway token (see /home/node/.openclaw/openclaw.json inside openclaw)
 GATEWAY_TOKEN="test-gateway-token-001"
 
-# Важно: регистрируем не только instance_url, но и device credentials:
+# Important: register not only instance_url, but also device credentials:
 scripts/register_real_openclaw_instance.sh \
   --instance-uuid "$OPENCLAW_INSTANCE_UUID" \
   --gateway-token "$GATEWAY_TOKEN" \
   --instance-url ws://openclaw:18789/ws
 
-# Сгенерировать pending pairing (любой trigger/сообщение), затем:
+# Generate pending pairing (any trigger/message), then:
 docker compose -f docker-compose.prod.yml exec -T openclaw \
   openclaw devices approve --latest --json
 ```
 
-### Шаг 6: Зафиксировать runtime-настройки OpenClaw
+### Step 6: Lock in OpenClaw runtime settings
 ```bash
 ./scripts/configure_openclaw_runtime.sh
 ```
-Скрипт фиксирует runtime `pi`, provider `lmstudio` и API `openai-responses`.
+
+The script fixes runtime `pi`, provider `lmstudio`, and API `openai-responses`.
 Default model: `lmstudio/qwen3.5-9b`.
-После запуска скрипта используйте тот же `gateway-token` в
-`scripts/register_real_openclaw_instance.sh`, затем подтвердите pairing.
-Это устраняет типовые ошибки:
+After running the script, use the same `gateway-token` in `scripts/register_real_openclaw_instance.sh`, then confirm pairing.
+This resolves common errors:
 - `Requested agent harness "codex" is not registered`
-- `SsrFBlockedError` при `openai-completions` и `lmstudio-proxy`
+- `SsrFBlockedError` for `openai-completions` and `lmstudio-proxy`
 
-## 🧪 Тестирование
+## 🧪 Testing
 
-### Проверить здоровье системы
+### Check system health
 ```bash
-./test_integration.sh
+./scripts/test_integration.sh
 ```
 
-### Тестировать маршрутизацию
+### Test routing
 ```bash
-./test_routing.sh
+./scripts/test_routing.sh
 ```
 
-### Мониторить логи
+### Monitor logs
 ```bash
 # All services
 docker compose -f docker-compose.prod.yml logs -f
@@ -115,87 +116,88 @@ docker compose -f docker-compose.prod.yml logs -f ws-router
 docker compose -f docker-compose.prod.yml logs -f lmstudio-proxy
 ```
 
-## 🔧 Настройка
+## 🔧 Configuration
 
-Переменные окружения в `docker-compose.prod.yml`:
+Environment variables in `docker-compose.prod.yml`:
 
 ```yaml
 # LLM Configuration
-LLM_PROVIDER: lmstudio        # Провайдер LLM
-LLM_BASE_URL: http://lmstudio-proxy:1234/v1  # Базовый URL
-LLM_MODEL: qwen/qwen3.5-9b   # Модель (измените если используете другую)
+LLM_PROVIDER: lmstudio        # LLM provider
+LLM_BASE_URL: http://lmstudio-proxy:1234/v1  # Base URL
+LLM_MODEL: qwen/qwen3.5-9b   # Model (change if you use another)
 
 # Instance Configuration
-INSTANCE_NAME: ClawMux-Main   # Имя инстанса
-DEVICE_ID: clawmux-device-001 # ID устройства
-GATEWAY_URL: http://ws-router:8060  # URL маршрутизатора
+INSTANCE_NAME: ClawMux-Main   # Instance name
+DEVICE_ID: clawmux-device-001 # Device ID
+GATEWAY_URL: http://ws-router:8060  # Router URL
 ```
 
-## 🔄 Переключение между mock и реальным
+## 🔄 Switching between mock and real
 
-### На mock (для тестирования)
+### To mock (for testing)
 ```bash
-# Убедитесь что используется основной compose файл
+# Make sure the main compose file is used
 docker compose down
 docker compose up -d
 ```
 
-### На реальный (production)
+### To real (production)
 ```bash
 docker compose down
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-## 🐛 Решение проблем
+## 🐛 Troubleshooting
 
-### Проблема: OpenClaw не подключается к LM Studio
+### Problem: OpenClaw does not connect to LM Studio
 
 ```bash
-# Проверить доступность LM Studio на хосте
+# Check LM Studio availability on the host
 curl http://127.0.0.1:1234/v1/models
 
-# Проверить внутри контейнера nginx
+# Check inside the nginx container
 docker compose -f docker-compose.prod.yml exec lmstudio-proxy \
   curl http://host.docker.internal:1234/v1/models
 
-# Проверить логи OpenClaw
+# Check OpenClaw logs
 docker compose -f docker-compose.prod.yml logs openclaw | grep -i "llm\|error"
 ```
-Если в LM Studio логе есть `model_load_failed`/`insufficient system resources`,
-выберите более легкую модель или уменьшите требования (квант/контекст/память).
 
-### Проблема: WS Router не может подключиться к OpenClaw
+If LM Studio logs contain `model_load_failed` / `insufficient system resources`, choose a lighter model or reduce requirements (quant/context/memory).
+
+### Problem: WS Router cannot connect to OpenClaw
 
 ```bash
-# Проверить что OpenClaw слушает на порту
+# Check that OpenClaw is listening on the port
 docker compose -f docker-compose.prod.yml exec openclaw \
   sh -lc "echo 'use ws-router-side probe instead'"
 
-# Проверить logs
+# Check logs
 docker compose -f docker-compose.prod.yml logs openclaw
 
-# Тестировать WS подключение
+# Test WS connection
 docker compose -f docker-compose.prod.yml exec ws-router \
   python -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('openclaw',18789)); print('OK openclaw:18789')"
 ```
-Если есть ошибка `Requested agent harness "codex" is not registered`, выполните:
+
+If you get `Requested agent harness "codex" is not registered`, run:
 ```bash
 ./scripts/configure_openclaw_runtime.sh
 ```
 
-### Проблема: Модель не загружена в LM Studio
+### Problem: Model is not loaded in LM Studio
 
 ```bash
-# Убедиться что модель загружена
+# Make sure the model is loaded
 curl http://127.0.0.1:1234/v1/models | jq '.data[] | .id'
 
-# Если нет, загрузить в LM Studio GUI:
+# If not, load it in the LM Studio GUI:
 # 1. Open http://127.0.0.1:1234
 # 2. Search for: qwen/qwen3.5-9b
 # 3. Click Load
 ```
 
-## 📊 Архитектура с реальным OpenClaw
+## 📊 Architecture with real OpenClaw
 
 ```
 ┌─────────────────┐
@@ -233,30 +235,30 @@ curl http://127.0.0.1:1234/v1/models | jq '.data[] | .id'
 └─────────────────┘
 ```
 
-## 📝 Команды reference
+## 📝 Reference commands
 
 ```bash
-# Просмотр всех сервисов
+# View all services
 docker compose -f docker-compose.prod.yml ps
 
-# Остановить только OpenClaw
+# Stop only OpenClaw
 docker compose -f docker-compose.prod.yml stop openclaw
 
-# Перезапустить WS Router
+# Restart WS Router
 docker compose -f docker-compose.prod.yml restart ws-router
 
-# Посмотреть использование ресурсов
+# View resource usage
 docker compose -f docker-compose.prod.yml stats
 
-# Удалить все данные и начать заново
+# Remove all data and start over
 docker compose -f docker-compose.prod.yml down -v
 ```
 
-## ✨ Готово!
+## ✨ Done!
 
-Система настроена и готова к использованию с реальным OpenClaw и LM Studio.
+The system is configured and ready to use with real OpenClaw and LM Studio.
 
-Для получения помощи, проверьте логи:
+For help, check logs:
 ```bash
 docker compose -f docker-compose.prod.yml logs --tail=50
 ```

@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
-COPY entrypoint.sh .
+COPY docker/entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
 # Run: migrations → uvicorn

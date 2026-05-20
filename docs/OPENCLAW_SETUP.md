@@ -78,7 +78,7 @@ uses the same token via `scripts/register_real_openclaw_instance.sh`.
 
 ### 1. Check Services
 ```bash
-./test_integration.sh
+./scripts/test_integration.sh
 ```
 
 ### 2. Check OpenClaw Logs
@@ -88,7 +88,7 @@ docker compose logs -f openclaw
 
 ### 3. Test Message Routing
 ```bash
-./test_routing.sh
+./scripts/test_routing.sh
 ```
 
 ### 4. Monitor Router

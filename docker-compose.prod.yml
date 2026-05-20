@@ -43,7 +43,7 @@ services:
     image: nginx:alpine
     container_name: ws_router_lmstudio_proxy
     volumes:
-      - ./nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
     # Do not bind host port 1234: LM Studio already runs on host:1234.
     # Proxy is only needed inside docker network as lmstudio-proxy:1234.
     restart: unless-stopped

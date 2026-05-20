@@ -181,7 +181,7 @@ curl http://localhost:8060/health
 Run the integration test:
 
 ```bash
-./test_integration.sh
+./scripts/test_integration.sh
 ```
 
 #### Setting up Mattermost bot for testing
