@@ -158,17 +158,47 @@ Edit `.env` with your Mattermost URL, tokens, database URL, and optional Dify se
 
 Use `requirements.lock` for deterministic installs when you want a reproducible environment.
 
-### 2. Docker quick start
+### 2. Docker quick start (with local testing stack)
+
+For easy testing, the compose includes PostgreSQL, Mattermost, and a mock OpenClaw server:
 
 ```bash
 docker compose up -d --build
 ```
+
+This starts:
+- PostgreSQL on `:5432`
+- Mattermost on `http://localhost:8065` (admin: `admin@example.com` / `admin123`)
+- Mock OpenClaw WS on `ws://localhost:18789`
+- ClawMux on `http://localhost:8060`
 
 Wait for the service to start and verify health:
 
 ```bash
 curl http://localhost:8060/health
 ```
+
+Run the integration test:
+
+```bash
+./scripts/test_integration.sh
+```
+
+#### Setting up Mattermost bot for testing
+
+After starting the services:
+
+1. Open Mattermost at `http://localhost:8065`
+2. Login with admin@example.com / admin123
+3. Create a team (or use default)
+4. Create a channel for testing
+5. The bot token is already configured in `.env`
+
+The bot will automatically connect when the router starts.
+
+### 3. Manual setup (production)
+
+For production deployment, see [docs/deployment.md](docs/deployment.md).
 
 ### 3. Local Python quick start
 

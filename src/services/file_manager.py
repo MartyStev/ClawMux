@@ -1,5 +1,5 @@
 """
-WS Router — File Manager.
+ClawMux — File Manager.
 
 Handles bidirectional file transfer between Mattermost and OpenClaw
 via shared Docker volume mounted at WORKSPACE_BASE_PATH.

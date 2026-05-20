@@ -1,5 +1,5 @@
 """
-WS Router — Database engine & session factory.
+ClawMux — Database engine & session factory.
 
 Uses SQLAlchemy 2.0 async with asyncpg driver.
 """

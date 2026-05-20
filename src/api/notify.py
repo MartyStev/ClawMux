@@ -1,5 +1,5 @@
 """
-WS Router — Notification API.
+ClawMux — Notification API.
 
 POST /api/v1/notify
 

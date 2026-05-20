@@ -1,5 +1,5 @@
 """
-WS Router — FastAPI Application.
+ClawMux — FastAPI Application.
 
 Entry point for the WebSocket Router service.
 Manages lifecycle of all components:
@@ -108,7 +108,7 @@ async def lifespan(app: FastAPI):
 
 # ── FastAPI App ──────────────────────────────────────────────────
 app = FastAPI(
-    title="WS Router",
+    title="ClawMux",
     description="Routes Mattermost messages to per-user OpenClaw instances via WebSocket",
     version="1.0.0",
     lifespan=lifespan,

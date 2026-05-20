@@ -1,5 +1,5 @@
 """
-WS Router — Mapping Storage.
+ClawMux — Mapping Storage.
 
 Provides lookup:
   provider_user_id + provider → (instance_url, device_credentials)

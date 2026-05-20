@@ -1,5 +1,5 @@
 """
-WS Router — WebSocket Connection Manager.
+ClawMux — WebSocket Connection Manager.
 
 Manages persistent WS connections to OpenClaw instances.
 

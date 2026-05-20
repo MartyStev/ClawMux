@@ -14,7 +14,7 @@ Usage:
     [--db-user router] \
     [--db-name ws_router] \
     [--db-service postgres] \
-    [--router-service ws-router] \
+    [--router-service clawmux] \
     [--no-restart]
 
 Description:
@@ -35,7 +35,7 @@ ROLE=""
 DB_USER="router"
 DB_NAME="ws_router"
 DB_SERVICE="postgres"
-ROUTER_SERVICE="ws-router"
+ROUTER_SERVICE="clawmux"
 RESTART_ROUTER="1"
 
 while [ "$#" -gt 0 ]; do
