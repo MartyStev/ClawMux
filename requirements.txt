@@ -1,0 +1,33 @@
+# Web framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
+# PostgreSQL
+asyncpg==0.30.0
+sqlalchemy[asyncio]==2.0.40
+
+# Alembic migrations
+alembic==1.15.2
+
+# WebSocket client (for OpenClaw connections)
+websockets==15.0.1
+
+# Mattermost driver
+mattermostdriver==7.3.2
+
+# Cryptography (Ed25519 for OpenClaw auth)
+cryptography==44.0.3
+
+# Settings
+pydantic-settings==2.9.1
+
+# Metrics
+prometheus-client==0.22.1
+
+# Logging
+structlog==25.4.0
+httpx==0.28.1
+aiofiles==25.1.0
+asyncache==0.3.1
+cachetools==5.5.2
+pytest==8.3.5

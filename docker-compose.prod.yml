@@ -1,0 +1,116 @@
+# Production docker-compose с реальным OpenClaw + LM Studio
+# Использование: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clawmux_postgres
+    environment:
+      POSTGRES_DB: ws_router
+      POSTGRES_USER: router
+      POSTGRES_PASSWORD: router
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U router -d ws_router"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - backend
+
+  mattermost:
+    image: mattermost/mattermost-preview:latest
+    platform: linux/amd64
+    container_name: clawmux_mattermost
+    environment:
+      MM_USERNAME: admin
+      MM_PASSWORD: admin123
+      MM_EMAIL: admin@example.com
+      MM_SERVICESETTINGS_SITEURL: http://localhost:8065
+    ports:
+      - "127.0.0.1:8065:8065"
+    volumes:
+      - mattermost_data:/opt/mattermost/data
+      - mattermost_logs:/opt/mattermost/logs
+      - mattermost_config:/opt/mattermost/config
+    restart: unless-stopped
+    networks:
+      - backend
+
+  lmstudio-proxy:
+    image: nginx:alpine
+    container_name: clawmux_lmstudio_proxy
+    volumes:
+      - ./docker/nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
+    # Do not bind host port 1234: LM Studio already runs on host:1234.
+    # Proxy is only needed inside docker network as lmstudio-proxy:1234.
+    restart: unless-stopped
+    networks:
+      - backend
+
+  openclaw:
+    # Real OpenClaw instance configured with LM Studio
+    # Uses GHCR by default; override with OPENCLAW_IMAGE if needed
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    container_name: clawmux_openclaw
+    environment:
+      # LLM Configuration
+      LLM_PROVIDER: lmstudio
+      LLM_BASE_URL: http://lmstudio-proxy:1234/v1
+      LLM_MODEL: qwen/qwen3.5-9b
+      
+      # Instance Configuration
+      INSTANCE_NAME: ClawMux-Main
+      DEVICE_ID: clawmux-device-001
+      GATEWAY_URL: http://clawmux:8060
+      
+      # Database - Creates openclaw database if not exists
+      DATABASE_URL: postgresql://router:router@postgres:5432/openclaw
+    ports:
+      - "127.0.0.1:19000:18789"
+    volumes:
+      # Persist OpenClaw runtime config and identity across recreate/restart.
+      - openclaw_state:/home/node/.openclaw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      lmstudio-proxy:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - backend
+
+  clawmux:
+    build: .
+    container_name: clawmux
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://router:router@postgres:5432/ws_router
+      MATTERMOST_URL: http://mattermost:8065
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mattermost:
+        condition: service_started
+      openclaw:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8060:8060"
+    volumes:
+      - ${OPENCLAW_CONFIGS_PATH:-./configs}:/configs
+    restart: unless-stopped
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mattermost_data:
+  mattermost_logs:
+  mattermost_config:
+  openclaw_state:

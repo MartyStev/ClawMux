@@ -1,0 +1,107 @@
+# Standalone docker-compose for clawmux.
+# Usage: docker compose up -d --build
+#
+# This starts:
+# - PostgreSQL на :5432
+# - Mattermost на http://localhost:8065 (admin/admin123)
+# - Mock OpenClaw WS на ws://localhost:18789
+# - LM Studio прокси только внутри Docker-сети (lmstudio-proxy:1234)
+# - ClawMux на http://localhost:8060
+#
+# Для использования реального OpenClaw с LM Studio:
+# 1. ./scripts/setup-openclaw.sh (to build the image)
+# 2. docker compose -f docker-compose.prod.yml up -d
+#
+# Для тестирования: cp .env.example .env && docker compose up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clawmux_postgres
+    environment:
+      POSTGRES_DB: ws_router
+      POSTGRES_USER: router
+      POSTGRES_PASSWORD: router
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U router -d ws_router"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - backend
+
+  mattermost:
+    image: mattermost/mattermost-preview:latest
+    platform: linux/amd64
+    container_name: clawmux_mattermost
+    environment:
+      MM_USERNAME: admin
+      MM_PASSWORD: admin123
+      MM_EMAIL: admin@example.com
+      MM_SERVICESETTINGS_SITEURL: http://localhost:8065
+    ports:
+      - "127.0.0.1:8065:8065"
+    volumes:
+      - mattermost_data:/opt/mattermost/data
+      - mattermost_logs:/opt/mattermost/logs
+      - mattermost_config:/opt/mattermost/config
+    restart: unless-stopped
+    networks:
+      - backend
+
+  lmstudio-proxy:
+    image: nginx:alpine
+    container_name: clawmux_lmstudio_proxy
+    volumes:
+      - ./docker/nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    networks:
+      - backend
+
+  openclaw-mock:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mock
+    container_name: clawmux_openclaw_mock
+    ports:
+      - "127.0.0.1:18789:18789"
+    environment:
+      MOCK_OPENCLAW_PORT: 18789
+    restart: unless-stopped
+    networks:
+      - backend
+
+  clawmux:
+    build: .
+    container_name: clawmux
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://router:router@postgres:5432/ws_router
+      MATTERMOST_URL: http://mattermost:8065
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mattermost:
+        condition: service_started
+      openclaw-mock:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8060:8060"
+    volumes:
+      - ${OPENCLAW_CONFIGS_PATH:-./configs}:/configs
+    restart: unless-stopped
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mattermost_data:
+  mattermost_logs:
+  mattermost_config:

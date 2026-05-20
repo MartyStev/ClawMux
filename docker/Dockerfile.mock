@@ -1,0 +1,12 @@
+# Simple mock for OpenClaw WS API for testing
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY scripts/mock_openclaw.py /app/mock_openclaw.py
+
+RUN pip install websockets
+
+EXPOSE 18789
+
+CMD ["python", "mock_openclaw.py"]
