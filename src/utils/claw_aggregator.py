@@ -1,5 +1,5 @@
 """
-WS Router — OpenClaw Message Aggregator.
+ClawMux — OpenClaw Message Aggregator.
 
 Problem:
     OpenClaw sends multiple chat.final events for a single agent run.

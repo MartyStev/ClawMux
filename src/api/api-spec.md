@@ -1,4 +1,4 @@
-# OpenClaw WS Router — API Spec
+# ClawMux — API Spec
 
 Version: 1.3
 

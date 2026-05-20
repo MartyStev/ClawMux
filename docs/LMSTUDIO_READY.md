@@ -11,7 +11,7 @@
 
 ✅ System Services:
    - Mattermost: http://localhost:8065 (admin@example.com / admin123)
-   - WS Router: http://localhost:8060
+   - ClawMux: http://localhost:8060
    - Mock OpenClaw: ws://localhost:18789
    - PostgreSQL: localhost:5432
 
@@ -91,7 +91,7 @@ docker compose exec lmstudio-proxy curl http://host.docker.internal:1234/v1/mode
 
 Mattermost (8065)
     ↓ WebSocket
-WS Router (8060)
+ClawMux (8060)
     ↓ WebSocket
 Mock OpenClaw (18789)
     ↓ Echo response
@@ -105,7 +105,7 @@ Mock OpenClaw (18789)
 
 Mattermost (8065)
     ↓ WebSocket
-WS Router (8060)
+ClawMux (8060)
     ↓ WebSocket
 OpenClaw (19000)
     ↓ HTTP API /v1/chat/completions
@@ -150,7 +150,7 @@ curl -X POST http://localhost:8060/api/v1/notify \
 ```bash
 # System Status
 docker compose ps
-docker compose logs ws-router --tail 20
+docker compose logs clawmux --tail 20
 
 # Testing
 ./scripts/test_integration.sh
@@ -160,7 +160,7 @@ docker compose logs ws-router --tail 20
 curl http://127.0.0.1:1234/v1/models | jq '.data[] | .id'
 
 # Restart Services
-docker compose restart ws-router
+docker compose restart clawmux
 
 # Stop Everything
 docker compose down
@@ -202,10 +202,10 @@ docker compose exec lmstudio-proxy \
   curl http://host.docker.internal:1234/v1/models
 ```
 
-### "WS Router can't connect to OpenClaw"
+### "ClawMux can't connect to OpenClaw"
 ```bash
 # Check logs
-docker compose logs ws-router | grep -i error
+docker compose logs clawmux | grep -i error
 
 # Verify instance URL
 docker compose exec -T postgres psql -U router -d ws_router \
@@ -233,7 +233,7 @@ cat .env | grep MATTERMOST_TOKEN
 The system is fully operational with LM Studio integration. You can now:
 
 1. ✅ Send messages through Mattermost bot
-2. ✅ Route them through WS Router
+2. ✅ Route them through ClawMux
 3. ✅ Process with Mock OpenClaw (or upgrade to real)
 4. ✅ Integrate LLM responses via LM Studio
 

@@ -1,5 +1,5 @@
 """
-WS Router — Control-Plane API.
+ClawMux — Control-Plane API.
 
 POST /api/v1/trigger
 

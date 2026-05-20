@@ -1,5 +1,5 @@
 """
-WS Router — Health Check Endpoints.
+ClawMux — Health Check Endpoints.
 """
 
 from typing import Optional
@@ -30,7 +30,7 @@ async def health():
     """Basic health check."""
     return {
         "status": "ok",
-        "service": "ws-router",
+        "service": "clawmux",
     }
 
 
@@ -39,6 +39,6 @@ async def health_detail(manager: WSConnectionManager = Depends(_get_ws_manager))
     """Detailed health check with connection stats."""
     return {
         "status": "ok",
-        "service": "ws-router",
+        "service": "clawmux",
         "active_ws_connections": manager.active_count if manager else 0,
     }

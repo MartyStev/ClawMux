@@ -2,7 +2,7 @@
 Proxy for Mattermost Interactive Messages (Buttons).
 
 Cloud Mattermost instances cannot reach the internal tools-server directly.
-This endpoint allows WS Router (which is already exposed to the public internet)
+This endpoint allows ClawMux (which is already exposed to the public internet)
 to receive button clicks from Mattermost and securely proxy them to the
 internal tools-server for database updates and agent triggering.
 """

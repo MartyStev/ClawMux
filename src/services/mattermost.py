@@ -1,5 +1,5 @@
 """
-WS Router — Mattermost Integration.
+ClawMux — Mattermost Integration.
 
 Connects to Mattermost WebSocket API v4 to:
 - Listen for new messages (posted events)

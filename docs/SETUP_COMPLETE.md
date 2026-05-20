@@ -8,7 +8,7 @@ Your ClawMux setup is now fully operational! Here's what was configured:
 - **Mattermost**: http://localhost:8065 (admin@example.com / admin123)
 - **PostgreSQL**: localhost:5432
 - **OpenClaw Mock**: ws://localhost:18789
-- **WS Router API**: http://localhost:8060
+- **ClawMux API**: http://localhost:8060
 
 ### User Configuration
 - **External User ID (Mattermost)**: `b7tau3ictbrfpfbj6zo314r6nr`
@@ -75,7 +75,7 @@ SET instance_url = 'ws://your-openclaw-host:port'
 WHERE instance_uuid = '2f99d082-71fb-4bf7-a4c5-cfeea78976c6';
 EOF
 
-docker compose restart ws-router
+docker compose restart clawmux
 ```
 
 ### 2. Set API Token (Required for Production)
@@ -86,12 +86,12 @@ openssl rand -hex 32
 # Update .env
 echo "API_TOKEN=<your-strong-token>" >> .env
 
-docker compose restart ws-router
+docker compose restart clawmux
 ```
 
 ### 3. Monitor Logs
 ```bash
-docker compose logs -f ws-router
+docker compose logs -f clawmux
 ```
 
 ### 4. Add More Users

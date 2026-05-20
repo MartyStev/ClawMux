@@ -1,5 +1,5 @@
 """
-WS Router — Prometheus Metrics.
+ClawMux — Prometheus Metrics.
 """
 
 from prometheus_client import Counter, Gauge, Histogram

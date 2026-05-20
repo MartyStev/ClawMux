@@ -1,5 +1,5 @@
 """
-WS Router — Dify Chat API Client.
+ClawMux — Dify Chat API Client.
 
 Fallback handler for users without an OpenClaw instance.
 Proxies messages to Dify Chat API (streaming mode) and returns the full answer.

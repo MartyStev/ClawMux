@@ -1,5 +1,5 @@
 """
-WS Router — SQLAlchemy models (3NF).
+ClawMux — SQLAlchemy models (3NF).
 
 Tables:
   instance       — OpenClaw instances + device credentials

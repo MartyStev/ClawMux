@@ -109,8 +109,8 @@ docker compose -f docker-compose.prod.yml logs -f
 # Only OpenClaw
 docker compose -f docker-compose.prod.yml logs -f openclaw
 
-# Only WS Router
-docker compose -f docker-compose.prod.yml logs -f ws-router
+# Only ClawMux
+docker compose -f docker-compose.prod.yml logs -f clawmux
 
 # Only LM Studio proxy
 docker compose -f docker-compose.prod.yml logs -f lmstudio-proxy
@@ -129,7 +129,7 @@ LLM_MODEL: qwen/qwen3.5-9b   # Model (change if you use another)
 # Instance Configuration
 INSTANCE_NAME: ClawMux-Main   # Instance name
 DEVICE_ID: clawmux-device-001 # Device ID
-GATEWAY_URL: http://ws-router:8060  # Router URL
+GATEWAY_URL: http://clawmux:8060  # Router URL
 ```
 
 ## 🔄 Switching between mock and real
@@ -165,18 +165,18 @@ docker compose -f docker-compose.prod.yml logs openclaw | grep -i "llm\|error"
 
 If LM Studio logs contain `model_load_failed` / `insufficient system resources`, choose a lighter model or reduce requirements (quant/context/memory).
 
-### Problem: WS Router cannot connect to OpenClaw
+### Problem: ClawMux cannot connect to OpenClaw
 
 ```bash
 # Check that OpenClaw is listening on the port
 docker compose -f docker-compose.prod.yml exec openclaw \
-  sh -lc "echo 'use ws-router-side probe instead'"
+  sh -lc "echo 'use clawmux-side probe instead'"
 
 # Check logs
 docker compose -f docker-compose.prod.yml logs openclaw
 
 # Test WS connection
-docker compose -f docker-compose.prod.yml exec ws-router \
+docker compose -f docker-compose.prod.yml exec clawmux \
   python -c "import socket; s=socket.socket(); s.settimeout(2); s.connect(('openclaw',18789)); print('OK openclaw:18789')"
 ```
 
@@ -206,8 +206,8 @@ curl http://127.0.0.1:1234/v1/models | jq '.data[] | .id'
          │ WebSocket
          ▼
 ┌─────────────────┐
-│   WS Router     │ :8060
-│  (ws-router)    │
+│   ClawMux       │ :8060
+│  (clawmux)      │
 └────────┬────────┘
          │ WebSocket
          ▼
@@ -244,8 +244,8 @@ docker compose -f docker-compose.prod.yml ps
 # Stop only OpenClaw
 docker compose -f docker-compose.prod.yml stop openclaw
 
-# Restart WS Router
-docker compose -f docker-compose.prod.yml restart ws-router
+# Restart ClawMux
+docker compose -f docker-compose.prod.yml restart clawmux
 
 # View resource usage
 docker compose -f docker-compose.prod.yml stats

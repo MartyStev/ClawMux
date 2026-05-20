@@ -3,7 +3,7 @@
 ## Prerequisites
 
 ### 1. LM Studio Setup
-Убедитесь, что LM Studio запущен на вашей машине:
+Make sure LM Studio is running on your machine:
 ```bash
 # LM Studio should be running on port 1234
 # Download model: qwen/qwen3.5-9b
@@ -12,7 +12,7 @@ curl http://127.0.0.1:1234/v1/models
 ```
 
 ### 2. OpenClaw Docker Image
-OpenClaw можно получить напрямую из GitHub Container Registry или сборкой из локального источника:
+OpenClaw can be obtained directly from GitHub Container Registry or built from local source:
 ```bash
 # Option 1: Pull from registry
 docker pull ghcr.io/openclaw/openclaw:latest
@@ -22,16 +22,17 @@ docker pull ghcr.io/openclaw/openclaw:latest
 OPENCLAW_SRC=/path/to/openclaw-source docker build -t ghcr.io/openclaw/openclaw:latest "$OPENCLAW_SRC"
 ```
 
-Если вы используете кастомный образ, установите переменную:
+If you use a custom image, set this variable:
 ```bash
 export OPENCLAW_IMAGE=your-registry/openclaw:tag
 ```
+
 ## Deployment
 
 ### Step 1: Start LM Studio on Host
 ```bash
-# LM Studio должен быть запущен и доступен на http://127.0.0.1:1234
-# Модель qwen/qwen3.5-9b должна быть загружена
+# LM Studio must be running and reachable at http://127.0.0.1:1234
+# The qwen/qwen3.5-9b model must be loaded
 ```
 
 ### Step 2: Start Docker Services
@@ -40,18 +41,17 @@ cd /Users/martystev/VS/personal/ClawMux
 docker compose down --remove-orphans
 docker compose -f docker-compose.prod.yml up -d --build
 ```
-`docker-compose.prod.yml` now mounts a persistent volume at `/home/node/.openclaw`,
-so OpenClaw identity/runtime config is preserved across `restart`/`recreate`.
 
-### Step 3: Configure Database
-For real OpenClaw you must register full instance credentials in `ws_router.instance`
-(not only `instance_url`):
+`docker-compose.prod.yml` now mounts a persistent volume at `/home/node/.openclaw`, so OpenClaw identity/runtime config is preserved across restarts and recreates.
+
+### Step 3: Configure the Database
+For real OpenClaw, you must register full instance credentials in `ws_router.instance` (not only `instance_url`):
 
 ```bash
 # Example UUID already used in this stack:
 OPENCLAW_INSTANCE_UUID="2f99d082-71fb-4bf7-a4c5-cfeea78976c6"
 
-# Gateway token from /home/node/.openclaw/openclaw.json inside openclaw container
+# Gateway token from /home/node/.openclaw/openclaw.json inside the openclaw container
 GATEWAY_TOKEN="test-gateway-token-001"
 
 scripts/register_real_openclaw_instance.sh \
@@ -59,7 +59,7 @@ scripts/register_real_openclaw_instance.sh \
   --gateway-token "$GATEWAY_TOKEN" \
   --instance-url ws://openclaw:18789/ws
 
-# Trigger any request through ws-router, then approve pairing:
+# Trigger any request through clawmux, then approve pairing:
 docker compose exec -T openclaw openclaw devices approve --latest --json
 ```
 
@@ -67,12 +67,13 @@ docker compose exec -T openclaw openclaw devices approve --latest --json
 ```bash
 ./scripts/configure_openclaw_runtime.sh
 ```
+
 This pins runtime to `pi` and provider API to `openai-responses`, which avoids:
 - `Requested agent harness "codex" is not registered`
 - SSRF blocks when using `openai-completions` against internal Docker DNS hostnames
-Default model in this script is `lmstudio/qwen3.5-9b`.
-The script also sets gateway token/auth defaults; after it runs, make sure DB mapping
-uses the same token via `scripts/register_real_openclaw_instance.sh`.
+
+The default model in this script is `lmstudio/qwen3.5-9b`.
+The script also sets gateway token/auth defaults; after it runs, make sure the DB mapping uses the same token via `scripts/register_real_openclaw_instance.sh`.
 
 ## Verification
 
@@ -93,41 +94,40 @@ docker compose logs -f openclaw
 
 ### 4. Monitor Router
 ```bash
-docker compose logs -f ws-router
+docker compose logs -f clawmux
 ```
 
 ## Troubleshooting
 
 ### LM Studio Connection Issues
-If nginx proxy can't reach LM Studio:
+If the nginx proxy can't reach LM Studio:
 ```bash
-# Verify LM Studio is running on host
+# Verify LM Studio is running on the host
 curl http://127.0.0.1:1234/v1/models
 
-# Test from nginx container
+# Test from the nginx container
 docker compose exec lmstudio-proxy curl http://host.docker.internal:1234/v1/models
 ```
 
-If you see `model_load_failed` in LM Studio logs, reduce model size/quantization
-or increase available memory in LM Studio runtime settings.
+If you see `model_load_failed` in LM Studio logs, reduce model size/quantization or increase available memory in LM Studio runtime settings.
 
 ### OpenClaw Connection Issues
-If ws-router can't connect to OpenClaw:
+If clawmux can't connect to OpenClaw:
 ```bash
 # Check OpenClaw logs
 docker compose -f docker-compose.prod.yml logs openclaw
 
 # Verify OpenClaw is listening
-docker compose -f docker-compose.prod.yml exec ws-router python - <<'PY'
+docker compose -f docker-compose.prod.yml exec clawmux python - <<'PY'
 import socket
 s = socket.socket()
 s.settimeout(2)
 s.connect(("openclaw", 18789))
-print("openclaw:18789 is reachable from ws-router")
+print("openclaw:18789 is reachable from clawmux")
 PY
 
 # Test WS connection
-docker compose -f docker-compose.prod.yml logs --tail=100 ws-router
+docker compose -f docker-compose.prod.yml logs --tail=100 clawmux
 ```
 
 If logs contain `Requested agent harness "codex" is not registered`, rerun:
@@ -146,7 +146,7 @@ docker compose exec postgres psql -U router -d openclaw -c "SELECT * FROM instan
 ```
 User (Mattermost) 
     ↓
-WS Router (ws-router:8060)
+ClawMux (clawmux:8060)
     ↓
 OpenClaw Instance (openclaw:18789/ws in Docker network)
     ↓
@@ -169,6 +169,6 @@ INSTANCE_NAME=ClawMux-Main
 # OpenClaw Device ID
 DEVICE_ID=clawmux-device-001
 
-# Gateway URL (for OpenClaw to find ws-router)
-GATEWAY_URL=http://ws-router:8060
+# Gateway URL (for OpenClaw to find clawmux)
+GATEWAY_URL=http://clawmux:8060
 ```

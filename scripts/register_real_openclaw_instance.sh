@@ -13,16 +13,16 @@ Usage:
     [--db-name ws_router]
 
 Description:
-  Generates a fresh device identity for ws-router, then UPSERTs the record in
+  Generates a fresh device identity for ClawMux, then UPSERTs the record in
   table `instance` (instance_url + device credentials + gateway token).
 
-  This is required for real OpenClaw when ws-router logs:
+  This is required for real OpenClaw when ClawMux logs:
     AUTH_DEVICE_TOKEN_MISMATCH
     DEVICE_AUTH_DEVICE_ID_MISMATCH
     PAIRING_REQUIRED
 
 After running this script:
-  1) Trigger any message through ws-router (POST /api/v1/trigger or Mattermost).
+  1) Trigger any message through clawmux (POST /api/v1/trigger or Mattermost).
   2) Approve pending device in OpenClaw:
        docker compose exec -T openclaw openclaw devices approve --latest --json
 EOF
@@ -68,7 +68,7 @@ if ! docker compose ps "$DB_SERVICE" >/dev/null 2>&1; then
   exit 1
 fi
 
-CREDS_LINES="$(docker compose exec -T ws-router python - <<'PY'
+CREDS_LINES="$(docker compose exec -T clawmux python - <<'PY'
 import base64
 import hashlib
 import secrets
@@ -104,7 +104,7 @@ PRIVATE_KEY_B64="$(printf '%s\n' "$CREDS_LINES" | sed -n 's/^private_key_b64=//p
 DEVICE_TOKEN="$(printf '%s\n' "$CREDS_LINES" | sed -n 's/^device_token=//p')"
 
 if [ -z "$DEVICE_ID" ] || [ -z "$PUBLIC_KEY_B64" ] || [ -z "$PRIVATE_KEY_B64" ] || [ -z "$DEVICE_TOKEN" ]; then
-  echo "Failed to generate credentials from ws-router container." >&2
+  echo "Failed to generate credentials from clawmux container." >&2
   exit 1
 fi
 
@@ -142,6 +142,6 @@ echo "  instance_url=$INSTANCE_URL"
 echo "  device_id=$DEVICE_ID"
 echo ""
 echo "Next steps:"
-echo "  1) Trigger any message through ws-router."
+echo "  1) Trigger any message through clawmux."
 echo "  2) Approve pending pairing in OpenClaw:"
 echo "     docker compose exec -T openclaw openclaw devices approve --latest --json"

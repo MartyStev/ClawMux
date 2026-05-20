@@ -1,5 +1,5 @@
 """
-WS Router — Configuration.
+ClawMux — Configuration.
 
 All settings are loaded from environment variables (or an .env file).
 """

@@ -7,7 +7,7 @@ Usage:
   scripts/configure_openclaw_runtime.sh \
     [--compose-file docker-compose.prod.yml] \
     [--service openclaw] \
-    [--container-name ws_router_openclaw] \
+    [--container-name clawmux_openclaw] \
     [--model lmstudio/qwen3.5-9b] \
     [--provider lmstudio] \
     [--base-url http://lmstudio-proxy:1234/v1] \
@@ -25,7 +25,7 @@ EOF
 
 COMPOSE_FILE="docker-compose.prod.yml"
 OPENCLAW_SERVICE="openclaw"
-OPENCLAW_CONTAINER="ws_router_openclaw"
+OPENCLAW_CONTAINER="clawmux_openclaw"
 MODEL_ID="lmstudio/qwen3.5-9b"
 PROVIDER_ID="lmstudio"
 BASE_URL="http://lmstudio-proxy:1234/v1"
@@ -162,5 +162,5 @@ openclaw_exec openclaw models status
 
 echo ""
 echo "OpenClaw runtime config applied successfully."
-echo "Use the same gateway token when registering ws-router instance:"
+echo "Use the same gateway token when registering clawmux instance:"
 echo "  bash scripts/register_real_openclaw_instance.sh --instance-uuid <uuid> --gateway-token $GATEWAY_TOKEN --instance-url ws://openclaw:18789/ws"

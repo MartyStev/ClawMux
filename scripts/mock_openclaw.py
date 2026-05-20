@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple mock OpenClaw WS server for testing ws-router.
+Simple mock OpenClaw WS server for testing clawmux.
 
 Emulates basic OpenClaw WS protocol:
 - connect.challenge → connect response

@@ -1,5 +1,5 @@
 """
-WS Router — Router Core.
+ClawMux — Router Core.
 
 The central orchestrator:
   1. Receive Mattermost event → resolve user → send to OpenClaw → reply to Mattermost

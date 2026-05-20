@@ -1,5 +1,5 @@
 """
-WS Router — OpenClaw WebSocket Client.
+ClawMux — OpenClaw WebSocket Client.
 
 Implements the OpenClaw Gateway authentication protocol (Ed25519 v2).
 
@@ -90,7 +90,7 @@ def _sign_connect(nonce: str, credentials: DeviceCredentials, gateway_token: str
         },
         "client": {
             "id": CLIENT_ID,
-            "version": "ws-router-2.0",
+            "version": "clawmux-2.0",
             "platform": PLATFORM,
             "mode": CLIENT_MODE,
         },

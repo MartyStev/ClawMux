@@ -170,7 +170,7 @@ This starts:
 - PostgreSQL on `:5432`
 - Mattermost on `http://localhost:8065` (admin: `admin@example.com` / `admin123`)
 - Mock OpenClaw WS on `ws://localhost:18789`
-- WS Router on `http://localhost:8060`
+- ClawMux on `http://localhost:8060`
 
 Wait for the service to start and verify health:
 

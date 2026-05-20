@@ -4,7 +4,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: ws_router_postgres
+    container_name: clawmux_postgres
     environment:
       POSTGRES_DB: ws_router
       POSTGRES_USER: router
@@ -23,7 +23,7 @@ services:
   mattermost:
     image: mattermost/mattermost-preview:latest
     platform: linux/amd64
-    container_name: ws_router_mattermost
+    container_name: clawmux_mattermost
     environment:
       MM_USERNAME: admin
       MM_PASSWORD: admin123
@@ -41,7 +41,7 @@ services:
 
   lmstudio-proxy:
     image: nginx:alpine
-    container_name: ws_router_lmstudio_proxy
+    container_name: clawmux_lmstudio_proxy
     volumes:
       - ./docker/nginx-lmstudio.conf:/etc/nginx/nginx.conf:ro
     # Do not bind host port 1234: LM Studio already runs on host:1234.
@@ -54,7 +54,7 @@ services:
     # Real OpenClaw instance configured with LM Studio
     # Uses GHCR by default; override with OPENCLAW_IMAGE if needed
     image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
-    container_name: ws_router_openclaw
+    container_name: clawmux_openclaw
     environment:
       # LLM Configuration
       LLM_PROVIDER: lmstudio
@@ -64,7 +64,7 @@ services:
       # Instance Configuration
       INSTANCE_NAME: ClawMux-Main
       DEVICE_ID: clawmux-device-001
-      GATEWAY_URL: http://ws-router:8060
+      GATEWAY_URL: http://clawmux:8060
       
       # Database - Creates openclaw database if not exists
       DATABASE_URL: postgresql://router:router@postgres:5432/openclaw
@@ -82,9 +82,9 @@ services:
     networks:
       - backend
 
-  ws-router:
+  clawmux:
     build: .
-    container_name: ws_router
+    container_name: clawmux
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://router:router@postgres:5432/ws_router
