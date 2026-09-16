@@ -10,6 +10,7 @@ This repository includes open-source readiness files such as `LICENSE`, `CONTRIB
 It is designed as an isolation-first solution for organizations that need strict multi-user separation across OpenClaw workspaces. It solves the operational gap between corporate chat systems and isolated OpenClaw workspaces by providing:
 
 - omni-channel routing (**Mattermost**, **Telegram**, **Bitrix24**, **Slack**, **VK Teams**, **MS Teams**)
+- lazy auto-provisioning of OpenClaw workspaces on first user interaction
 - dedicated OpenClaw routing per user
 - proactive outbound notifications to OpenClaw users
 - external trigger API for OpenClaw workloads
