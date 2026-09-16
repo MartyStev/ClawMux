@@ -1,75 +1,53 @@
-# ClawMux — AI Router for OpenClaw
+# ClawMux — Omni-Channel AI Router for OpenClaw
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/martystev/ClawMux/actions/workflows/ci.yml/badge.svg)](https://github.com/martystev/ClawMux/actions/workflows/ci.yml)
 
-ClawMux is a lightweight multi-user control plane that routes Mattermost chat traffic to per-user OpenClaw instances over persistent WebSocket connections.
+ClawMux is a lightweight multi-user control plane and omni-channel AI router that dispatches chat traffic from **Mattermost**, **Telegram**, **Bitrix24**, **Slack**, **VK Teams (Myteam)**, and **Microsoft Teams** to per-user OpenClaw instances over persistent WebSocket connections.
 
 This repository includes open-source readiness files such as `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, and GitHub issue/PR templates.
 
-It is designed as an isolation-first solution for organizations that need strict multi-user separation across OpenClaw workspaces. It solves the operational gap between chat systems and isolated OpenClaw workspaces by providing:
+It is designed as an isolation-first solution for organizations that need strict multi-user separation across OpenClaw workspaces. It solves the operational gap between corporate chat systems and isolated OpenClaw workspaces by providing:
 
+- omni-channel routing (**Mattermost**, **Telegram**, **Bitrix24**, **Slack**, **VK Teams**, **MS Teams**)
 - dedicated OpenClaw routing per user
 - proactive outbound notifications to OpenClaw users
 - external trigger API for OpenClaw workloads
-- file proxying between Mattermost and OpenClaw workspaces
-- health and metrics endpoints for observability of OpenClaw routing
+- real-time response streaming and typing indicators
+- file proxying between chat platforms and OpenClaw workspaces
+- health and readiness probes (`/health/live`, `/health/ready`) and Prometheus metrics
+
+## Supported Chat Platforms
+
+| Provider | Transport / Protocol | Mode | Real-time Streaming | Threads / Quotes |
+|---|---|---|---|---|
+| **Mattermost** | WebSocket + REST | Active Listener | ✅ (Debounced) | ✅ `root_id` |
+| **Telegram** | Long Polling / REST | Active Listener | ✅ `editMessageText` | ✅ `message_thread_id` |
+| **Bitrix24** | Webhook + REST | Webhook Endpoint | ✅ `imbot.message.update` | ✅ |
+| **Slack** | Socket Mode (WS) + REST | Active Listener | ✅ `chat.update` | ✅ `thread_ts` |
+| **VK Teams** | Long Polling + REST | Active Listener | ✅ `messages/editText` | ✅ `replyMsgId` |
+| **MS Teams** | Webhook + OAuth2 REST | Webhook Endpoint | ✅ Activity Update | ✅ `replyToId` |
 
 ## What ClawMux Does
 
-- **Route messages from Mattermost** to a mapped OpenClaw instance
+- **Route messages from corporate chat platforms** to mapped OpenClaw instances
 - **Keep persistent WebSocket sessions** with auto-reconnect and idle cleanup
-- **Deliver proactive notifications** back into Mattermost
-- **Proxy attachments and media** between Mattermost and OpenClaw workspaces
+- **Deliver proactive notifications** back into the user's active channel
+- **Proxy attachments and media** between corporate chats and OpenClaw workspaces
 - **Expose a control-plane API** for external task triggers
 - **Fallback to Dify** when user mapping is missing and DIFY API key is configured
-
-## What Is an Instance?
-
-In ClawMux, an instance is a user-specific OpenClaw workspace reachable via its gateway URL.
-
-Each instance is treated as an isolated AI workspace:
-
-- one OpenClaw instance per user mapping
-- per-channel identity via `provider` + `provider_user_id`
-- persistent WS connectivity to send/receive messages
-- file context injected from Mattermost attachments
-
-This repository does not provision containers itself; it routes traffic to already provisioned OpenClaw instances and keeps the session alive.
-
-## OpenClaw Integration
-
-ClawMux is built specifically for OpenClaw integration and supports OpenClaw gateway routing, OpenClaw session management, and OpenClaw attachment synchronization.
-
-- routes Mattermost messages into OpenClaw agent workspaces
-- forwards OpenClaw proactive messages back to Mattermost
-- downloads and uploads files on behalf of OpenClaw instances
-- maintains user mappings for OpenClaw identities in PostgreSQL
-
-This makes ClawMux an ideal companion for OpenClaw deployments where each user has a dedicated OpenClaw workspace.
-
-## Multi-User Isolation
-
-ClawMux is built for teams that need strict separation between users and their OpenClaw workspaces. Each message is routed only to the instance assigned to the user, and proactive replies are delivered only to the user's known Mattermost channel.
-
-Key isolation guarantees:
-
-- one OpenClaw instance per user mapping
-- no shared chat state between users
-- no direct user access to OpenClaw instances through the router
-- Mattermost traffic flows through a single authorized bot channel
 
 ## Architecture
 
 ```text
-Mattermost WS/HTTP
+Corporate Messengers (Mattermost, Telegram, Bitrix24, Slack, VK Teams, MS Teams)
       │
       ▼
-  ClawMux Router
+  ClawMux Router (Multi-Channel Dispatcher)
+      ├─ ProviderRegistry (Chat Adapters Layer)
       ├─ MappingStorage (PostgreSQL)
       ├─ WSConnectionManager (persistent OpenClaw WS)
-      ├─ Router core (message and proactive delivery)
-      ├─ Control-Plane API (/api/v1/trigger, /api/v1/notify)
+      ├─ Control-Plane API (/api/v1/trigger, /api/v1/notify, /api/v1/mappings/reload)
       └─ FileManager (attachments/media sync)
       │
       ▼
