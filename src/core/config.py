@@ -144,6 +144,28 @@ class Settings(BaseSettings):
         description="Workspace root path inside the OpenClaw container.",
     )
 
+    # ── Auto-Provisioning ─────────────────────────────────────────
+    enable_auto_provisioning: bool = Field(
+        default=False,
+        description="Automatically provision an OpenClaw instance on first message from unmapped user",
+    )
+    provisioning_driver: str = Field(
+        default="webhook",
+        description="Driver to use for provisioning: 'webhook' or 'mock'",
+    )
+    provisioning_webhook_url: str = Field(
+        default="",
+        description="External orchestrator webhook URL (e.g. http://orchestrator:8000/api/v1/instances/provision)",
+    )
+    provisioning_webhook_token: str = Field(
+        default="",
+        description="Bearer/API token for external provisioning webhook",
+    )
+    provisioning_timeout_sec: int = Field(
+        default=60,
+        description="Maximum seconds to wait for instance auto-provisioning and readiness",
+    )
+
     # ── Control-Plane API ─────────────────────────────────────────────────────────
     api_token: str = Field(
         default="",

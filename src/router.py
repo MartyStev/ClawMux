@@ -35,6 +35,9 @@ from src.services.ws_manager import WSConnectionManager
 logger = structlog.get_logger(__name__)
 
 
+from src.services.provisioner import InstanceProvisioner, ProvisioningError
+
+
 class StreamUpdater:
     """
     Throttles streaming updates to chat platform APIs to avoid rate limits.
@@ -102,6 +105,7 @@ class Router:
         mm_http = getattr(self.mattermost, "_http_client", None)
         self.file_manager = FileManager(http_client=mm_http) if mm_http else None
 
+        self.provisioner = InstanceProvisioner(mapping=self.mapping)
         # Last known channel per identity key — used for proactive delivery.
         self._user_channels: Dict[str, str] = {}
         # Dify fallback — active only when DIFY_API_KEY is configured
@@ -176,18 +180,50 @@ class Router:
                 log = log.bind(instance_url=info.instance_url)
             except InstanceNotFoundError:
                 log.warning("user_not_mapped")
-                messages_total.labels(status="unmapped").inc()
-                # ── Dify fallback ──────────────────────────────────────────────
-                if self._dify is not None:
+                # ── Auto-Provisioning fallback ────────────────────────────────
+                if settings.enable_auto_provisioning:
+                    try:
+                        placeholder_id = await adapter.send_reply(
+                            event.channel_id,
+                            "⏳ Initializing your personal OpenClaw workspace...",
+                            root_id=root_id,
+                        )
+                        info = await self.provisioner.provision_instance(
+                            provider=event.provider,
+                            user_id=event.user_id,
+                        )
+                        log = log.bind(instance_url=info.instance_url)
+                        log.info("auto_provisioning_success")
+                        if placeholder_id:
+                            if event.provider == "mattermost":
+                                await adapter.update_reply(placeholder_id, "✅ Workspace ready! Processing your message...")
+                            else:
+                                await adapter.update_reply(placeholder_id, "✅ Workspace ready! Processing your message...", channel_id=event.channel_id)
+                    except Exception as e:
+                        log.error("auto_provisioning_failed", error=str(e))
+                        messages_total.labels(status="provisioning_failed").inc()
+                        if self._dify is not None:
+                            await self._handle_dify_fallback(event, log)
+                        else:
+                            await adapter.send_reply(
+                                event.channel_id,
+                                f"❌ Failed to initialize your workspace: {e}",
+                                root_id=root_id,
+                            )
+                        return
+                elif self._dify is not None:
+                    messages_total.labels(status="unmapped").inc()
                     await self._handle_dify_fallback(event, log)
+                    return
                 else:
+                    messages_total.labels(status="unmapped").inc()
                     await adapter.send_reply(
                         event.channel_id,
                         "⚠️ No OpenClaw instance is assigned to your account. "
                         "Please contact the administrator.",
                         root_id=root_id,
                     )
-                return
+                    return
         else:
             log = log.bind(instance_url=info.instance_url)
 

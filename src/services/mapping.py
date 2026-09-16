@@ -11,6 +11,7 @@ Reads from tables: instance, app_user, user_identity, user_instance (join).
 import structlog
 from asyncache import cached
 from cachetools import TTLCache
+from typing import Optional
 from dataclasses import dataclass
 from sqlalchemy import select
 
@@ -208,6 +209,102 @@ class MappingStorage:
         _external_id_cache.clear()
 
     def invalidate_cache(self) -> None:
-        """Clear all mapping caches."""
+        """Clear all internal caches."""
         self.invalidate_identity_cache()
         self.invalidate_external_id_cache()
+
+    async def bind_user_instance(
+        self,
+        provider: str,
+        provider_user_id: str,
+        instance_uuid: str,
+        instance_url: str,
+        credentials: DeviceCredentials,
+        external_user_id: Optional[str] = None,
+        role: Optional[str] = "user",
+    ) -> InstanceInfo:
+        """
+        Create or update AppUser, UserIdentity, Instance, and UserInstance in 3NF DB schema.
+        Invalidates cache upon success.
+        """
+        provider = self._validate_provider(provider)
+        app_user_id = f"{provider}:{provider_user_id}"
+        ext_user_id = external_user_id or app_user_id
+
+        async with async_session_factory() as session:
+            async with session.begin():
+                # 1. Upsert Instance
+                stmt_inst = select(Instance).where(Instance.instance_uuid == instance_uuid)
+                res_inst = await session.execute(stmt_inst)
+                inst = res_inst.scalar_one_or_none()
+
+                if inst is None:
+                    inst = Instance(
+                        instance_uuid=instance_uuid,
+                        instance_url=instance_url,
+                        device_id=credentials.device_id,
+                        public_key_b64=credentials.public_key_b64,
+                        private_key_b64=credentials.private_key_b64,
+                        device_token=credentials.device_token,
+                        gateway_token=credentials.gateway_token,
+                    )
+                    session.add(inst)
+                else:
+                    inst.instance_url = instance_url
+                    inst.device_id = credentials.device_id
+                    inst.public_key_b64 = credentials.public_key_b64
+                    inst.private_key_b64 = credentials.private_key_b64
+                    inst.device_token = credentials.device_token
+                    inst.gateway_token = credentials.gateway_token
+
+                # 2. Upsert AppUser
+                stmt_user = select(AppUser).where(AppUser.id == app_user_id)
+                res_user = await session.execute(stmt_user)
+                user = res_user.scalar_one_or_none()
+
+                if user is None:
+                    user = AppUser(
+                        id=app_user_id,
+                        external_user_id=ext_user_id,
+                        role=role,
+                    )
+                    session.add(user)
+
+                # 3. Upsert UserIdentity
+                stmt_id = select(UserIdentity).where(
+                    UserIdentity.user_id == app_user_id,
+                    UserIdentity.provider == provider,
+                )
+                res_id = await session.execute(stmt_id)
+                ident = res_id.scalar_one_or_none()
+
+                if ident is None:
+                    ident = UserIdentity(
+                        user_id=app_user_id,
+                        provider=provider,
+                        provider_user_id=provider_user_id,
+                    )
+                    session.add(ident)
+
+                # 4. Upsert UserInstance
+                stmt_ui = select(UserInstance).where(UserInstance.user_id == app_user_id)
+                res_ui = await session.execute(stmt_ui)
+                ui = res_ui.scalar_one_or_none()
+
+                if ui is None:
+                    ui = UserInstance(
+                        user_id=app_user_id,
+                        instance_uuid=instance_uuid,
+                    )
+                    session.add(ui)
+                else:
+                    ui.instance_uuid = instance_uuid
+
+        self.invalidate_cache()
+        logger.info(
+            "user_instance_bound_successfully",
+            provider=provider,
+            provider_user_id=provider_user_id,
+            instance_uuid=instance_uuid,
+        )
+        return InstanceInfo(instance_url=instance_url, credentials=credentials)
