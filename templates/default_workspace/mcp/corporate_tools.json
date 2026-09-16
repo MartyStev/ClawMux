@@ -1,0 +1,12 @@
+{
+  "tools": [
+    {
+      "name": "jira_create_issue",
+      "description": "Create a new corporate Jira issue in the backlog"
+    },
+    {
+      "name": "confluence_search",
+      "description": "Search corporate documentation knowledge base"
+    }
+  ]
+}

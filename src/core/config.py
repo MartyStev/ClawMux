@@ -143,6 +143,10 @@ class Settings(BaseSettings):
         default="/home/node/.openclaw/workspace",
         description="Workspace root path inside the OpenClaw container.",
     )
+    workspace_template_path: str = Field(
+        default="./templates/default_workspace",
+        description="Path to default workspace template directory containing AGENTS.md, openclaw.json, subagents, and mcp configs.",
+    )
 
     # ── Auto-Provisioning ─────────────────────────────────────────
     enable_auto_provisioning: bool = Field(

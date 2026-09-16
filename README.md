@@ -11,6 +11,7 @@ It is designed as an isolation-first solution for organizations that need strict
 
 - omni-channel routing (**Mattermost**, **Telegram**, **Bitrix24**, **Slack**, **VK Teams**, **MS Teams**)
 - lazy auto-provisioning of OpenClaw workspaces on first user interaction
+- corporate workspace template seeding & sync engine (`AGENTS.md`, `openclaw.json`, subagents, MCP tools)
 - dedicated OpenClaw routing per user
 - proactive outbound notifications to OpenClaw users
 - external trigger API for OpenClaw workloads
@@ -246,6 +247,35 @@ This creates or updates:
 - `app_user`
 - `user_identity`
 - `user_instance`
+
+## Workspace Template Management
+
+ClawMux allows organizations to manage corporate prompts, guidelines, and MCP tools in a master template directory (`templates/default_workspace/`):
+
+- `openclaw.json`: MCP servers and base model configuration
+- `AGENTS.md`: Corporate assistant rules, privacy boundaries, and policies
+- `subagents/*.md`: Instructions for specialized subagents (e.g. `code_reviewer.md`)
+- `mcp/*.json`: Corporate MCP tool configurations
+
+When new instances are created via auto-provisioning, ClawMux seeds these files automatically.
+
+### Synchronizing Existing Workspaces
+
+When you update master templates, use `scripts/sync_workspace_templates.py` to push changes to running instances:
+
+```bash
+# Preview updates without writing files
+python scripts/sync_workspace_templates.py --all --dry-run
+
+# Synchronize all workspaces with automatic timestamped backup
+python scripts/sync_workspace_templates.py --all
+
+# Synchronize and reload Docker containers
+python scripts/sync_workspace_templates.py --all --restart-containers
+```
+
+> [!NOTE]
+> Synchronizing templates only updates managed files present in the template directory. User files in `workspace/downloads/` and personal artifacts are preserved.
 
 ## Documentation
 
