@@ -10,7 +10,7 @@ so that the same Dify conversation_id is reused across multiple messages.
 
 import asyncio
 import json
-from typing import Optional, AsyncIterator
+from typing import Optional, AsyncIterator, Callable, Awaitable
 
 import httpx
 import structlog
@@ -54,6 +54,7 @@ class DifyClient:
         user_id: str,
         message: str,
         inputs: Optional[dict] = None,
+        on_stream: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> str:
         """
         Send a message to Dify and return the complete answer.
@@ -88,7 +89,7 @@ class DifyClient:
 
         try:
             answer, new_conv_id = await asyncio.wait_for(
-                self._stream_chat(payload, log),
+                self._stream_chat(payload, log, on_stream=on_stream),
                 timeout=self._timeout,
             )
         except asyncio.TimeoutError:
@@ -121,6 +122,7 @@ class DifyClient:
         self,
         payload: dict,
         log,
+        on_stream: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> tuple[str, str]:
         """
         POST /chat-messages and consume the SSE stream.
@@ -169,6 +171,11 @@ class DifyClient:
                         chunk = event.get("answer", "")
                         if chunk:
                             answer_parts.append(chunk)
+                            if on_stream:
+                                try:
+                                    await on_stream("".join(answer_parts))
+                                except Exception as e:
+                                    log.warning("dify_on_stream_failed", error=str(e))
 
                     elif event_type == "message_end":
                         # Final event — we have the full answer

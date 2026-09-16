@@ -109,3 +109,60 @@ def test_handle_event_fallback_to_dify():
     asyncio.run(router.handle_event(event))
 
     router._handle_dify_fallback.assert_called_once_with(event, ANY)
+
+
+def test_handle_event_preserves_root_id_in_replies():
+    """Test that handle_event passes root_id to send_reply when replying to a thread."""
+    mapping = AsyncMock()
+    mapping.get_instance_by_identity.return_value = InstanceInfo(
+        instance_url="ws://test:123/ws",
+        credentials=DeviceCredentials(
+            device_id="dev",
+            public_key_b64="pub",
+            private_key_b64="priv",
+            device_token="dt",
+            gateway_token="gt",
+        ),
+    )
+    ws_manager = MagicMock()
+    ws_manager.send_message = AsyncMock(return_value=("threaded response", []))
+    ws_manager.get_cached_info.return_value = None
+    mattermost = AsyncMock()
+    mattermost.send_reply.return_value = "placeholder-id"
+
+    router = Router(mapping, ws_manager, mattermost)
+    router._typing_loop = AsyncMock()
+
+    event = MattermostEvent(
+        provider="mattermost",
+        user_id="user-1",
+        channel_id="chan-1",
+        post_id="post-reply-1",
+        text="replying in thread",
+        file_ids=[],
+        root_id="root-thread-999",
+    )
+
+    asyncio.run(router.handle_event(event))
+
+    # Placeholder was sent with root_id
+    mattermost.send_reply.assert_any_call("chan-1", ANY, root_id="root-thread-999")
+    # update_reply was called with response
+    mattermost.update_reply.assert_called_with("placeholder-id", "threaded response")
+
+
+def test_stream_updater_throttles_updates():
+    """Test that StreamUpdater throttles calls to mattermost.update_reply."""
+    from src.router import StreamUpdater
+
+    mattermost = AsyncMock()
+    updater = StreamUpdater(mattermost, post_id="post-1", interval=0.5)
+
+    async def run_stream():
+        await updater.on_stream("chunk 1")
+        await updater.on_stream("chunk 2")
+        await updater.on_stream("chunk 3")
+
+    asyncio.run(run_stream())
+    assert mattermost.update_reply.call_count == 1
+    mattermost.update_reply.assert_called_with("post-1", "chunk 1")

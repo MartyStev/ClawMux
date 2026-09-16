@@ -19,7 +19,14 @@ from src.core.models import AppUser, Instance, UserIdentity, UserInstance
 
 logger = structlog.get_logger(__name__)
 DEFAULT_PROVIDER = "mattermost"
-SUPPORTED_PROVIDERS = {DEFAULT_PROVIDER}
+SUPPORTED_PROVIDERS = {
+    "mattermost",
+    "telegram",
+    "bitrix",
+    "slack",
+    "vk_teams",
+    "teams",
+}
 
 _identity_cache = TTLCache(maxsize=1000, ttl=600)
 _external_id_cache = TTLCache(maxsize=1000, ttl=600)

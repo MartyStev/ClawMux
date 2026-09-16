@@ -17,15 +17,14 @@ import structlog
 import websockets
 
 from src.core.config import settings
+from src.services.chat_adapter import BaseChatAdapter, ChannelEvent
 from src.services.mapping import DEFAULT_PROVIDER
 
 logger = structlog.get_logger(__name__)
 
 
-class MattermostEvent:
+class MattermostEvent(ChannelEvent):
     """Parsed incoming Mattermost message event."""
-
-    __slots__ = ("provider", "user_id", "channel_id", "text", "post_id", "file_ids")
 
     def __init__(
         self,
@@ -35,32 +34,37 @@ class MattermostEvent:
         post_id: str,
         file_ids: list[str] | None = None,
         provider: str = DEFAULT_PROVIDER,
+        root_id: str = "",
     ):
-        self.provider = provider
-        self.user_id = user_id
-        self.channel_id = channel_id
-        self.text = text
-        self.post_id = post_id
-        self.file_ids: list[str] = file_ids or []
-
-    def __repr__(self) -> str:
-        return (
-            f"MattermostEvent(provider={self.provider!r}, user_id={self.user_id!r}, "
-            f"channel_id={self.channel_id!r}, text={self.text[:50]!r}, "
-            f"file_ids={self.file_ids!r})"
+        super().__init__(
+            user_id=user_id,
+            channel_id=channel_id,
+            text=text,
+            post_id=post_id,
+            file_ids=file_ids or [],
+            provider=provider,
+            root_id=root_id,
         )
 
 
-class MattermostClient:
+class MattermostClient(BaseChatAdapter):
     """
-    Mattermost integration layer.
+    Mattermost integration layer implementing BaseChatAdapter.
 
     Responsibilities:
     - Connect to Mattermost WS API for real-time events
-    - Parse 'posted' events → MattermostEvent
+    - Parse 'posted' events → ChannelEvent
     - Send reply messages via HTTP API
     - Filter out bot's own messages
     """
+
+    @property
+    def name(self) -> str:
+        return "mattermost"
+
+    @property
+    def is_connected(self) -> bool:
+        return self.is_ws_connected
 
     def __init__(self):
         url = settings.mattermost_url.rstrip("/")
@@ -168,6 +172,7 @@ class MattermostClient:
         channel_id = post.get("channel_id", "")
         text = post.get("message", "")
         post_id = post.get("id", "")
+        root_id = post.get("root_id", "")
 
         # Ignore bot's own messages
         if user_id == self._bot_user_id:
@@ -184,6 +189,7 @@ class MattermostClient:
             channel_id=channel_id,
             text_len=len(text),
             post_id=post_id,
+            root_id=root_id,
             file_ids_count=len(file_ids),
         )
 
@@ -193,6 +199,7 @@ class MattermostClient:
             text=text,
             post_id=post_id,
             file_ids=file_ids,
+            root_id=root_id,
         )
 
         # Dispatch to handler in a separate task so we don't block the WS read loop
@@ -310,7 +317,7 @@ class MattermostClient:
             )
             raise
 
-    async def update_reply(self, post_id: str, message: str) -> None:
+    async def update_reply(self, post_id: str, message: str, channel_id: str = "") -> None:
         """
         Update an existing post in Mattermost. Used for streaming responses.
         """
@@ -336,6 +343,17 @@ class MattermostClient:
             logger.error("mattermost_dm_create_error", user_id=user_id, error=str(e))
             return ""
 
+    @property
+    def is_ws_connected(self) -> bool:
+        """Check if WebSocket connection to Mattermost is active."""
+        if not self._running or self._ws is None:
+            return False
+        try:
+            if hasattr(self._ws, "protocol") and hasattr(self._ws.protocol, "state"):
+                return self._ws.protocol.state.name == "OPEN"
+            return getattr(self._ws, "open", not getattr(self._ws, "closed", True))
+        except Exception:
+            return False
 
     async def stop(self) -> None:
         """Stop listening and disconnect."""
@@ -348,3 +366,7 @@ class MattermostClient:
         if hasattr(self, '_http_client'):
             await self._http_client.aclose()
         logger.info("mattermost_stopped")
+
+
+# Alias for consistent naming
+MattermostAdapter = MattermostClient

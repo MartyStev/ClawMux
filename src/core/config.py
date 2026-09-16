@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     )
 
     # ── Mattermost ────────────────────────────────────────────────
+    enable_mattermost: bool = Field(
+        default=True,
+        description="Enable Mattermost channel adapter",
+    )
     mattermost_url: str = Field(
         default="https://mattermost.example.com",
         description="Mattermost server URL (without trailing slash)",
@@ -29,6 +33,72 @@ class Settings(BaseSettings):
     mattermost_bot_username: str = Field(
         default="openclaw",
         description="Bot username to ignore own messages",
+    )
+
+    # ── Telegram ──────────────────────────────────────────────────
+    enable_telegram: bool = Field(
+        default=False,
+        description="Enable Telegram Bot channel adapter",
+    )
+    telegram_bot_token: str = Field(
+        default="",
+        description="Telegram bot token from @BotFather",
+    )
+
+    # ── Bitrix24 ──────────────────────────────────────────────────
+    enable_bitrix: bool = Field(
+        default=False,
+        description="Enable Bitrix24 chat bot adapter",
+    )
+    bitrix_webhook_url: str = Field(
+        default="",
+        description="Bitrix24 incoming webhook URL for REST API calls (e.g. https://portal.bitrix24.com/rest/1/token/)",
+    )
+    bitrix_bot_id: int = Field(
+        default=0,
+        description="Bitrix24 Bot ID registered on the portal",
+    )
+
+    # ── Slack ─────────────────────────────────────────────────────
+    enable_slack: bool = Field(
+        default=False,
+        description="Enable Slack channel adapter (Socket Mode)",
+    )
+    slack_bot_token: str = Field(
+        default="",
+        description="Slack Bot User OAuth Token (xoxb-...)",
+    )
+    slack_app_token: str = Field(
+        default="",
+        description="Slack App-level Token for Socket Mode (xapp-...)",
+    )
+
+    # ── VK Teams (Myteam) ─────────────────────────────────────────
+    enable_vk_teams: bool = Field(
+        default=False,
+        description="Enable VK Teams (Myteam) channel adapter",
+    )
+    vk_teams_bot_token: str = Field(
+        default="",
+        description="VK Teams Bot API Token",
+    )
+    vk_teams_api_url: str = Field(
+        default="https://myteam.mail.ru/bot/v1",
+        description="VK Teams Bot API base URL",
+    )
+
+    # ── Microsoft Teams ───────────────────────────────────────────
+    enable_teams: bool = Field(
+        default=False,
+        description="Enable Microsoft Teams Bot adapter",
+    )
+    teams_app_id: str = Field(
+        default="",
+        description="Microsoft Azure Bot App ID",
+    )
+    teams_app_password: str = Field(
+        default="",
+        description="Microsoft Azure Bot App Password / Secret",
     )
 
     # ── WS Connection Manager ─────────────────────────────────────

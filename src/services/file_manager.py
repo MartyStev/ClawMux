@@ -97,6 +97,23 @@ def build_attachment_context(files: list[DownloadedFile]) -> str:
     )
 
 
+def sanitize_filename(name: str, fallback: str) -> str:
+    """
+    Sanitize a filename to prevent path traversal and remove dangerous characters.
+    """
+    if not name:
+        return fallback
+    # Normalize slashes and extract base name only
+    clean = os.path.basename(name.replace("\\", "/"))
+    # Remove control chars and null bytes
+    clean = re.sub(r"[\x00-\x1f\x7f]", "", clean)
+    # Strip leading dots and spaces to prevent hidden files or root traversal
+    clean = clean.lstrip(". ")
+    if not clean:
+        return fallback
+    return clean
+
+
 # ── FileManager ────────────────────────────────────────────────────────────────
 
 class FileManager:
@@ -124,7 +141,7 @@ class FileManager:
             return []
 
         host_dir = f"{settings.workspace_base_path}/{uuid}/workspace/downloads"
-        os.makedirs(host_dir, exist_ok=True)
+        await asyncio.to_thread(os.makedirs, host_dir, exist_ok=True)
 
         results: list[DownloadedFile] = []
         max_bytes = settings.attachment_max_size_mb * 1024 * 1024
@@ -154,7 +171,8 @@ class FileManager:
         resp = await self._http_client.get(f"/files/{file_id}/info")
         resp.raise_for_status()
         meta = resp.json()
-        filename: str = meta.get("name") or file_id
+        raw_name: str = meta.get("name") or file_id
+        filename = sanitize_filename(raw_name, fallback=file_id)
         size_bytes: int = int(meta.get("size", 0))
         mime_type: str = meta.get("mime_type", "application/octet-stream")
 
@@ -169,7 +187,7 @@ class FileManager:
 
         # Resolve final filename (avoid collisions)
         host_path = os.path.join(host_dir, filename)
-        if os.path.exists(host_path):
+        if await asyncio.to_thread(os.path.exists, host_path):
             base, ext = os.path.splitext(filename)
             import uuid as _uuid
             filename = f"{base}_{_uuid.uuid4().hex[:6]}{ext}"
@@ -184,7 +202,7 @@ class FileManager:
 
         # Make file readable/writable by everyone so container can access it
         try:
-            os.chmod(host_path, 0o666)
+            await asyncio.to_thread(os.chmod, host_path, 0o666)
         except OSError as e:
             self._log.warning("chmod_failed", error=str(e))
 
@@ -219,11 +237,11 @@ class FileManager:
         Upload a file from the shared volume to Mattermost.
         Returns the Mattermost file_id on success, None on failure.
         """
-        if not os.path.isfile(host_path):
+        if not await asyncio.to_thread(os.path.isfile, host_path):
             self._log.warning("upload_file_not_found", host_path=host_path)
             return None
 
-        file_size = os.path.getsize(host_path)
+        file_size = await asyncio.to_thread(os.path.getsize, host_path)
         max_bytes = settings.attachment_max_size_mb * 1024 * 1024
         if file_size > max_bytes:
             self._log.warning(

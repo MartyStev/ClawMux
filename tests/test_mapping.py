@@ -30,4 +30,4 @@ def test_provider_is_normalized() -> None:
 
 def test_unsupported_provider_fails_explicitly() -> None:
     with pytest.raises(UnsupportedProviderError):
-        MappingStorage._validate_provider("slack")
+        MappingStorage._validate_provider("unsupported_service_xyz")

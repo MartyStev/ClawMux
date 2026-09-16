@@ -14,6 +14,7 @@ The router looks up the DB row by (`external_user_id`, `provider`) and resolves
 the provider-specific `user_id` used to connect to the target OpenClaw instance.
 """
 import asyncio
+import secrets
 import uuid
 from typing import Optional
 
@@ -67,7 +68,7 @@ async def trigger(
     - Requires an `X-Api-Token` header.
     """
     # ── Auth ──────────────────────────────────────────────────────
-    if not settings.api_token or x_api_token != settings.api_token:
+    if not settings.api_token or not secrets.compare_digest(x_api_token, settings.api_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API token",

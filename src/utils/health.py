@@ -1,23 +1,31 @@
-"""
-ClawMux — Health Check Endpoints.
-"""
+import asyncio
+from typing import Any, Dict, Optional
 
-from typing import Optional
+from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy import text
 
-from fastapi import APIRouter, Depends
-
+from src.core.database import async_session_factory
+from src.services.chat_adapter import ProviderRegistry
 from src.services.ws_manager import WSConnectionManager
 
 health_router = APIRouter(tags=["health"])
 
-# Module-level reference — set once at startup via init_health()
+# Module-level references — set once at startup via init_health()
 _ws_manager: Optional[WSConnectionManager] = None
+_mattermost: Optional[Any] = None
+_providers: Optional[ProviderRegistry] = None
 
 
-def init_health(ws_manager: WSConnectionManager) -> None:
-    """Inject WS manager dependency at application startup."""
-    global _ws_manager
+def init_health(
+    ws_manager: WSConnectionManager,
+    mattermost: Optional[Any] = None,
+    providers: Optional[ProviderRegistry] = None,
+) -> None:
+    """Inject dependencies at application startup."""
+    global _ws_manager, _mattermost, _providers
     _ws_manager = ws_manager
+    _mattermost = mattermost
+    _providers = providers
 
 
 def _get_ws_manager() -> WSConnectionManager:
@@ -27,7 +35,7 @@ def _get_ws_manager() -> WSConnectionManager:
 
 @health_router.get("/health")
 async def health():
-    """Basic health check."""
+    """Basic health check (liveness probe)."""
     return {
         "status": "ok",
         "service": "clawmux",
@@ -42,3 +50,49 @@ async def health_detail(manager: WSConnectionManager = Depends(_get_ws_manager))
         "service": "clawmux",
         "active_ws_connections": manager.active_count if manager else 0,
     }
+
+
+@health_router.get("/health/ready")
+async def health_ready(response: Response):
+    """Readiness probe checking database and active chat channel adapters."""
+    db_ok = False
+    db_error = None
+    try:
+        async def _ping_db():
+            async with async_session_factory() as session:
+                await session.execute(text("SELECT 1"))
+
+        await asyncio.wait_for(_ping_db(), timeout=2.0)
+        db_ok = True
+    except Exception as e:
+        db_error = str(e)
+
+    channels: Dict[str, str] = {}
+    channels_ok = True
+
+    if _providers is not None and _providers.all():
+        for adapter in _providers.all():
+            is_conn = adapter.is_connected
+            channels[adapter.name] = "ok" if is_conn else "disconnected"
+            if not is_conn:
+                channels_ok = False
+    elif _mattermost is not None:
+        mm_ok = getattr(_mattermost, "is_ws_connected", True)
+        channels["mattermost"] = "ok" if mm_ok else "disconnected"
+        channels_ok = mm_ok
+    else:
+        channels["default"] = "ok"
+
+    is_ready = db_ok and channels_ok
+    if not is_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    result: Dict[str, Any] = {
+        "status": "ready" if is_ready else "degraded",
+        "service": "clawmux",
+        "database": "ok" if db_ok else f"down: {db_error}",
+        "channels": channels,
+    }
+    # Keep backwards-compatible key for existing monitors/tests
+    result["mattermost_ws"] = channels.get("mattermost", "ok" if channels_ok else "disconnected")
+    return result

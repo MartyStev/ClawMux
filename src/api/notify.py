@@ -6,6 +6,7 @@ POST /api/v1/notify
 Send a system message directly to a user in Mattermost.
 """
 import asyncio
+import secrets
 
 import structlog
 from fastapi import APIRouter, Header, HTTPException, Request, status
@@ -21,6 +22,9 @@ from src.services.mapping import (
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["control-plane"])
+
+
+# ── Models ────────────────────────────────────────────────────────
 
 
 class NotifyRequest(BaseModel):
@@ -43,7 +47,7 @@ async def notify(
     Send a system notification directly to a user in Mattermost.
     Finds the user's identity by external_user_id + provider.
     """
-    if not settings.api_token or x_api_token != settings.api_token:
+    if not settings.api_token or not secrets.compare_digest(x_api_token, settings.api_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API token",
