@@ -58,6 +58,13 @@ class Settings(BaseSettings):
         default=0,
         description="Bitrix24 Bot ID registered on the portal",
     )
+    bitrix_inbound_secret: str = Field(
+        default="",
+        description=(
+            "Bitrix24 incoming webhook token. Inbound events must present it via "
+            "auth.access_token or ?secure=/?access_token= query. Empty = webhook disabled."
+        ),
+    )
 
     # ── Slack ─────────────────────────────────────────────────────
     enable_slack: bool = Field(
@@ -99,6 +106,35 @@ class Settings(BaseSettings):
     teams_app_password: str = Field(
         default="",
         description="Microsoft Azure Bot App Password / Secret",
+    )
+    teams_jwt_audience: str = Field(
+        default="",
+        description=(
+            "Expected 'aud' claim of inbound Bot Framework JWTs. "
+            "Empty = use TEAMS_APP_ID. Webhook is rejected when neither is set."
+        ),
+    )
+    teams_jwks_urls: str = Field(
+        default=(
+            "https://login.microsoftonline.com/common/discovery/keys,"
+            "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+        ),
+        description="Comma-separated JWKS URLs used to verify inbound Teams tokens",
+    )
+    teams_allowed_issuers: str = Field(
+        default=(
+            "https://api.botframework.com,"
+            "https://sts.windows.net/d6d49420-f39b-4df7-a1dc-d59a935871db/,"
+            "https://login.microsoftonline.com/d6d49420-f39b-4df7-a1dc-d59a935871db/v2.0"
+        ),
+        description="Comma-separated accepted JWT issuers for inbound Teams activities",
+    )
+    teams_allowed_service_url_hosts: str = Field(
+        default="smba.trafficmanager.net,smtg.trafficmanager.net",
+        description=(
+            "Comma-separated host suffix whitelist for activity serviceUrl. "
+            "Bearer tokens are only ever sent to whitelisted HTTPS hosts (anti-SSRF)."
+        ),
     )
 
     # ── WS Connection Manager ─────────────────────────────────────
@@ -180,6 +216,25 @@ class Settings(BaseSettings):
         description=(
             "Internal endpoint used by /api/v1/mm/action proxy for Mattermost "
             "interactive buttons."
+        ),
+    )
+    mm_action_shared_secret: str = Field(
+        default="",
+        description=(
+            "Shared secret for POST /api/v1/mm/action (X-MM-Action-Secret header "
+            "or ?secret= query param, e.g. in the registered callback URL). "
+            "Empty = endpoint disabled."
+        ),
+    )
+
+    # ── Credential Encryption ────────────────────────────────────────────────
+    credential_encryption_key: str = Field(
+        default="",
+        description=(
+            "Fernet key (base64, 44 chars) used to encrypt OpenClaw private keys "
+            "and tokens at rest in PostgreSQL. Generate: "
+            "python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'. "
+            "Empty = stored credentials remain plaintext (not recommended)."
         ),
     )
 

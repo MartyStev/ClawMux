@@ -14,6 +14,8 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, relationship
 
+from src.core.crypto import EncryptedText
+
 
 class Base(DeclarativeBase):
     """SQLAlchemy declarative base."""
@@ -47,13 +49,16 @@ class Instance(Base):
         Text, nullable=False, comment="Ed25519 public key, base64url no padding",
     )
     private_key_b64: str = Column(
-        Text, nullable=False, comment="Ed25519 private key, base64url no padding",
+        EncryptedText, nullable=False,
+        comment="Ed25519 private key, base64url no padding (encrypted at rest)",
     )
     device_token: str = Column(
-        Text, nullable=False, comment="Operator token from paired.json",
+        EncryptedText, nullable=False,
+        comment="Operator token from paired.json (encrypted at rest)",
     )
     gateway_token: str = Column(
-        Text, nullable=False, comment="OPENCLAW_GATEWAY_TOKEN for this instance",
+        EncryptedText, nullable=False,
+        comment="OPENCLAW_GATEWAY_TOKEN for this instance (encrypted at rest)",
     )
     created_at: datetime = Column(
         DateTime(timezone=True), server_default=func.now(),

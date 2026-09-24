@@ -7,9 +7,11 @@ to receive button clicks from Mattermost and securely proxy them to the
 internal tools-server for database updates and agent triggering.
 """
 
+import secrets
+
 import httpx
 import structlog
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from src.core.config import settings
 
@@ -19,10 +21,29 @@ router = APIRouter(prefix="/api/v1", tags=["mattermost"])
 
 
 @router.post("/mm/action")
-async def proxy_mm_action(request: Request):
+async def proxy_mm_action(
+    request: Request,
+    x_mm_action_secret: str = Header("", alias="x-mm-action-secret"),
+):
     """
     Proxy Mattermost button click to internal tools-server.
+
+    Requires the shared secret (MM_ACTION_SHARED_SECRET), passed either via
+    the X-MM-Action-Secret header or the ?secret= query param appended to the
+    URL registered in Mattermost. Empty secret config = endpoint disabled.
     """
+    provided = x_mm_action_secret or request.query_params.get("secret", "")
+    if (
+        not settings.mm_action_shared_secret
+        or not provided
+        or not secrets.compare_digest(provided, settings.mm_action_shared_secret)
+    ):
+        logger.warning("mm_action_unauthorized")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing action secret",
+        )
+
     try:
         payload = await request.json()
     except Exception:

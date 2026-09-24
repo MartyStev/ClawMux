@@ -74,6 +74,15 @@ async def lifespan(app: FastAPI):
         idle_timeout_sec=settings.ws_idle_timeout_sec,
     )
 
+    if not settings.credential_encryption_key.strip():
+        logger.warning(
+            "credential_encryption_disabled",
+            hint=(
+                "Set CREDENTIAL_ENCRYPTION_KEY (Fernet) to encrypt OpenClaw "
+                "private keys and tokens at rest; see SECURITY.md"
+            ),
+        )
+
     # ── Initialize components ─────────────────────────────────────
     mapping = MappingStorage()
     registry = ProviderRegistry()

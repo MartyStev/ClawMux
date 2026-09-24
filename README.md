@@ -110,6 +110,10 @@ See [docs/control-plane-api.md](docs/control-plane-api.md) for full request and 
 ## Security
 
 - `X-Api-Token` protects control-plane endpoints
+- inbound **MS Teams** activities require a valid Bot Framework JWT (signature, `aud`, `iss`, expiry); `serviceUrl` is restricted to a whitelisted HTTPS host list (anti-SSRF)
+- inbound **Bitrix24** events must present the webhook secret (`BITRIX_INBOUND_SECRET`)
+- the **Mattermost button proxy** (`/api/v1/mm/action`) requires a shared secret (`MM_ACTION_SHARED_SECRET`)
+- OpenClaw private keys and tokens are **encrypted at rest** in PostgreSQL (`CREDENTIAL_ENCRYPTION_KEY`, Fernet) — see the hardening checklist in [SECURITY.md](SECURITY.md)
 - channel identity is separated from internal user mapping
 - instance URLs stay behind the router
 - no hardcoded secrets in repository templates

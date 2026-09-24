@@ -91,7 +91,20 @@ class TeamsAdapter(BaseChatAdapter):
         return self._access_token
 
     def register_service_url(self, conversation_id: str, service_url: str) -> None:
-        """Record the serviceUrl received in the incoming activity."""
+        """Record the serviceUrl received in the incoming activity.
+
+        Only whitelisted HTTPS Bot Framework hosts are accepted — this value
+        becomes the base URL for outbound calls carrying our OAuth Bearer token.
+        """
+        from src.services.teams_auth import is_allowed_service_url
+
+        if not is_allowed_service_url(service_url):
+            logger.error(
+                "teams_service_url_not_whitelisted",
+                conversation_id=conversation_id,
+                service_url=service_url[:120],
+            )
+            return
         self._service_urls[conversation_id] = service_url.rstrip("/")
 
     def get_service_url(self, conversation_id: str) -> str:

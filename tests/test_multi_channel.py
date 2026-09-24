@@ -119,7 +119,8 @@ def test_router_dispatches_to_correct_provider_adapter():
     assert len(bx.replies) == 0
 
 
-def test_bitrix_webhook_endpoint():
+def test_bitrix_webhook_endpoint(monkeypatch):
+    monkeypatch.setattr("src.api.bitrix.settings.bitrix_inbound_secret", "test-secret")
     app = FastAPI()
     app.include_router(bitrix_router)
     
@@ -128,6 +129,7 @@ def test_bitrix_webhook_endpoint():
     client = TestClient(app)
 
     payload = {
+        "auth": {"access_token": "test-secret"},
         "event": "ONIMBOTMESSAGEADD",
         "data": {
             "PARAMS": {
@@ -136,7 +138,7 @@ def test_bitrix_webhook_endpoint():
                 "MESSAGE": "Hello Bitrix",
                 "MESSAGE_ID": "1001",
             }
-        }
+        },
     }
 
     resp = client.post("/api/v1/bitrix/event", json=payload)
@@ -242,7 +244,9 @@ async def test_teams_send_reply():
     await teams.stop()
 
 
-def test_teams_webhook_endpoint():
+def test_teams_webhook_endpoint(monkeypatch):
+    # JWT verification itself is covered in tests/test_security_fixes.py
+    monkeypatch.setattr("src.api.teams.verify_inbound_token", lambda authorization: None)
     app = FastAPI()
     app.include_router(teams_router)
 

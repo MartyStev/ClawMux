@@ -8,10 +8,11 @@ and forwards them to the Router.
 """
 
 import asyncio
+import secrets
 from typing import Any, Dict
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from src.core.config import settings
 from src.services.chat_adapter import ChannelEvent
@@ -19,6 +20,20 @@ from src.services.chat_adapter import ChannelEvent
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["bitrix"])
+
+
+def _extract_inbound_token(request: Request, payload: Dict[str, Any]) -> str:
+    """Bitrix sends the webhook token as auth.access_token or a query param."""
+    auth = payload.get("auth")
+    if isinstance(auth, dict):
+        token = auth.get("access_token")
+        if isinstance(token, str) and token:
+            return token
+    for key in ("secure", "access_token", "code"):
+        token = request.query_params.get(key)
+        if token:
+            return token
+    return ""
 
 
 @router.post("/bitrix/event")
@@ -33,6 +48,16 @@ async def bitrix_webhook_event(request: Request) -> Dict[str, Any]:
     else:
         form = await request.form()
         payload = dict(form)
+
+    # ── Verify webhook secret (BITRIX_INBOUND_SECRET) ──────────────
+    if not settings.bitrix_inbound_secret:
+        raise HTTPException(status_code=401, detail="Bitrix webhook is disabled")
+    inbound_token = _extract_inbound_token(request, payload)
+    if not inbound_token or not secrets.compare_digest(
+        inbound_token, settings.bitrix_inbound_secret
+    ):
+        logger.warning("bitrix_webhook_bad_secret")
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
 
     # In Bitrix REST events:
     # event: "ONIMBOTMESSAGEADD"

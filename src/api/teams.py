@@ -11,10 +11,11 @@ import asyncio
 from typing import Any, Dict
 
 import structlog
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from src.services.chat_adapter import ChannelEvent
 from src.services.teams import TeamsAdapter
+from src.services.teams_auth import TeamsAuthError, is_allowed_service_url, verify_inbound_token
 
 logger = structlog.get_logger(__name__)
 
@@ -26,6 +27,13 @@ async def teams_webhook_messages(request: Request) -> Response:
     """
     Receive activities from Azure Bot Framework.
     """
+    # ── Verify Bot Framework JWT (signature / aud / iss / exp) ──────
+    try:
+        verify_inbound_token(request.headers.get("authorization"))
+    except TeamsAuthError as e:
+        logger.warning("teams_webhook_unauthorized", error=str(e))
+        raise HTTPException(status_code=401, detail="Unauthorized activity")
+
     try:
         activity = await request.json()
     except Exception:
@@ -47,6 +55,15 @@ async def teams_webhook_messages(request: Request) -> Response:
 
     if not user_id or not conversation_id or not text:
         return Response(status_code=200)
+
+    # ── Anti-SSRF: only trusted Bot Framework hosts may receive our Bearer token ──
+    if not is_allowed_service_url(service_url):
+        logger.warning(
+            "teams_service_url_rejected",
+            service_url=service_url[:120],
+            conversation_id=conversation_id,
+        )
+        raise HTTPException(status_code=403, detail="serviceUrl host is not allowed")
 
     # Save serviceUrl on TeamsAdapter if registered
     registry = getattr(request.app.state, "registry", None)
