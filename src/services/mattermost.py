@@ -19,6 +19,7 @@ import websockets
 from src.core.config import settings
 from src.services.chat_adapter import BaseChatAdapter, ChannelEvent
 from src.services.mapping import DEFAULT_PROVIDER
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -210,7 +211,7 @@ class MattermostClient(BaseChatAdapter):
                     await self._on_message(event)
                 except Exception as e:
                     logger.error("mattermost_on_message_error", error=str(e))
-            asyncio.create_task(_dispatch())
+            fire_and_forget(_dispatch(), name="mm-on-message")
 
     async def send_typing(self, channel_id: str, parent_id: str = "") -> None:
         """

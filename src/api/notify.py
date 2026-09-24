@@ -5,7 +5,6 @@ POST /api/v1/notify
 
 Send a system message directly to a user in Mattermost.
 """
-import asyncio
 import secrets
 
 import structlog
@@ -13,6 +12,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from src.core.config import settings
+from src.utils.tasks import fire_and_forget
 from src.services.mapping import (
     DEFAULT_PROVIDER,
     InstanceNotFoundError,
@@ -79,13 +79,13 @@ async def notify(
     log = log.bind(provider_user_id=provider_user_id)
     
     # Launch the send task in the background without blocking the API response
-    asyncio.create_task(
+    fire_and_forget(
         app_router.handle_proactive(
             user_id=provider_user_id,
             text=req.text,
             provider=provider,
         ),
-        name=f"notify-{provider_user_id[:8]}"
+        name=f"notify-{provider_user_id[:8]}",
     )
 
     log.info("notify_dispatched", text_len=len(req.text))

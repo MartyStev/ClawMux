@@ -37,6 +37,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from websockets.asyncio.client import ClientConnection
 
 from src.utils.claw_aggregator import ClawAggregator, ClawMessage
+from src.utils.tasks import fire_and_forget
 from src.core.config import settings
 from src.services.mapping import DeviceCredentials
 
@@ -154,17 +155,11 @@ class OpenClawClient:
     def _fire_and_log(self, coro: Awaitable, *, task_name: str = "task") -> asyncio.Task:
         """Schedule a coroutine as a background task with guaranteed error logging.
 
-        Plain asyncio.create_task() swallows exceptions — they only surface as
-        a cryptic 'Task exception was never retrieved' warning in stderr.
-        This wrapper catches any exception and routes it to structlog.
+        Delegates to fire_and_forget, which keeps a strong reference to the
+        task (bare create_task() allows GC mid-flight) and routes exceptions
+        to structlog instead of 'Task exception was never retrieved'.
         """
-        async def _wrapper() -> None:
-            try:
-                await coro
-            except Exception as exc:
-                self._log.error("background_task_error", task=task_name, error=str(exc))
-
-        return asyncio.create_task(_wrapper(), name=task_name)
+        return fire_and_forget(coro, name=task_name)
 
     @property
     def is_connected(self) -> bool:
@@ -502,7 +497,7 @@ class OpenClawClient:
         # lifecycle:end fallback: resolve Future DIRECTLY with empty media_paths
                                 self._pending_future.set_result((_captured_text, []))
 
-                        asyncio.create_task(
+                        fire_and_forget(
                             _delayed_fallback(),
                             name=f"lifecycle-fallback-{run_id[:8]}",
                         )

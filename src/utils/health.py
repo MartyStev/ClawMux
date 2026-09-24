@@ -77,7 +77,9 @@ async def health_ready(response: Response):
             if not is_conn:
                 channels_ok = False
     elif _mattermost is not None:
-        mm_ok = getattr(_mattermost, "is_ws_connected", True)
+        # Fail closed: an adapter that doesn't report its WS state is
+        # treated as disconnected rather than silently ready.
+        mm_ok = bool(getattr(_mattermost, "is_ws_connected", False))
         channels["mattermost"] = "ok" if mm_ok else "disconnected"
         channels_ok = mm_ok
     else:

@@ -8,8 +8,8 @@ Connects to Microsoft Bot Framework / Azure Bot Service REST API to:
 - Send typing activities
 """
 
-import asyncio
 import time
+from collections import OrderedDict
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
@@ -18,6 +18,10 @@ import structlog
 from src.services.chat_adapter import BaseChatAdapter, ChannelEvent
 
 logger = structlog.get_logger(__name__)
+
+# Bound for the conversation → serviceUrl map; long-lived bots see a steady
+# stream of new conversation ids, so evict least recently used entries.
+_MAX_SERVICE_URLS = 10000
 
 
 class TeamsAdapter(BaseChatAdapter):
@@ -38,7 +42,7 @@ class TeamsAdapter(BaseChatAdapter):
         self._access_token = ""
         self._token_expires_at = 0.0
         self._running = False
-        self._service_urls: Dict[str, str] = {}  # channel_id / conversation_id -> serviceUrl
+        self._service_urls: "OrderedDict[str, str]" = OrderedDict()  # conversation_id -> serviceUrl (LRU-bounded)
         self._on_message: Optional[Callable[[ChannelEvent], Awaitable[None]]] = None
 
     @property
@@ -106,9 +110,16 @@ class TeamsAdapter(BaseChatAdapter):
             )
             return
         self._service_urls[conversation_id] = service_url.rstrip("/")
+        self._service_urls.move_to_end(conversation_id)
+        while len(self._service_urls) > _MAX_SERVICE_URLS:
+            self._service_urls.popitem(last=False)
 
     def get_service_url(self, conversation_id: str) -> str:
-        return self._service_urls.get(conversation_id, "https://smba.trafficmanager.net/teams")
+        url = self._service_urls.get(conversation_id)
+        if url is None:
+            return "https://smba.trafficmanager.net/teams"
+        self._service_urls.move_to_end(conversation_id)
+        return url
 
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send a reply activity to a Teams conversation."""

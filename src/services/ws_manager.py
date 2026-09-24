@@ -53,12 +53,16 @@ class WSConnectionManager:
         self._guardian_tasks: Dict[str, asyncio.Task] = {}
         self._last_active: Dict[str, float] = {}  # user_id → last message timestamp
         self._shutting_down = False
+        self._cleanup_task: Optional[asyncio.Task] = None
 
-        # Start periodic idle-connection cleanup
-        self._cleanup_task: asyncio.Task = asyncio.get_event_loop().create_task(
-            self._cleanup_loop(),
-            name="ws-idle-cleanup",
-        )
+    async def start(self) -> None:
+        """Start the periodic idle-connection cleanup loop. Call once from the app lifespan."""
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._shutting_down = False
+            self._cleanup_task = asyncio.create_task(
+                self._cleanup_loop(),
+                name="ws-idle-cleanup",
+            )
 
     def _get_lock(self, user_id: str) -> asyncio.Lock:
         if user_id not in self._locks:
@@ -318,12 +322,13 @@ class WSConnectionManager:
         self._shutting_down = True
 
         # Cancel cleanup loop
-        if not self._cleanup_task.done():
+        if self._cleanup_task is not None and not self._cleanup_task.done():
             self._cleanup_task.cancel()
             try:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
+        self._cleanup_task = None
 
         # Cancel all guardians
         guardians = list(self._guardian_tasks.values())

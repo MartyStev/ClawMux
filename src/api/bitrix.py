@@ -7,7 +7,6 @@ Receives incoming chat events from Bitrix24 Chat Bot webhook (ONIMBOTMESSAGEADD)
 and forwards them to the Router.
 """
 
-import asyncio
 import secrets
 from typing import Any, Dict
 
@@ -16,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from src.core.config import settings
 from src.services.chat_adapter import ChannelEvent
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -98,7 +98,7 @@ async def bitrix_webhook_event(request: Request) -> Dict[str, Any]:
 
     app_router = getattr(request.app.state, "router", None)
     if app_router:
-        asyncio.create_task(
+        fire_and_forget(
             app_router.handle_event(event),
             name=f"bitrix-msg-{message_id or from_user_id}",
         )

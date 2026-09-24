@@ -34,6 +34,8 @@ from typing import Awaitable, Callable, Dict, List, Optional
 
 import structlog
 
+from src.core.config import settings
+
 logger = structlog.get_logger(__name__)
 
 # Short exact strings that are obviously placeholder-only responses.
@@ -51,7 +53,7 @@ def is_valid_text(text: str) -> bool:
     if not text:
         return False
     stripped = text.strip()
-    if len(stripped) < 5:
+    if len(stripped) < settings.claw_min_valid_text_len:
         return False
     if stripped.lower() in _JUNK_EXACT:
         return False

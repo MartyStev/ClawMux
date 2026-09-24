@@ -15,6 +15,7 @@ import httpx
 import structlog
 
 from src.services.chat_adapter import BaseChatAdapter, ChannelEvent
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -46,6 +47,21 @@ class TelegramAdapter(BaseChatAdapter):
     def is_connected(self) -> bool:
         return self._running and bool(self._bot_id)
 
+    def _redact(self, text: str) -> str:
+        """Strip the bot token from any text before it reaches the logs.
+
+        httpx exception strings embed the full request URL, which contains
+        the token (/bot<token>/method).
+        """
+        return text.replace(self._token, "***") if self._token else text
+
+    def _check(self, resp: httpx.Response) -> None:
+        """raise_for_status with a token-redacted error message."""
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPError(self._redact(str(e))) from None
+
     async def start(
         self,
         on_message: Callable[[ChannelEvent], Awaitable[None]],
@@ -69,7 +85,7 @@ class TelegramAdapter(BaseChatAdapter):
                 username=me.get("username"),
             )
         except Exception as e:
-            logger.error("telegram_login_failed", error=str(e))
+            logger.error("telegram_login_failed", error=self._redact(str(e)))
             raise
 
         self._listen_task = asyncio.create_task(
@@ -111,7 +127,7 @@ class TelegramAdapter(BaseChatAdapter):
             except Exception as e:
                 if not self._running:
                     break
-                logger.error("telegram_poll_exception", error=str(e))
+                logger.error("telegram_poll_exception", error=self._redact(str(e)))
                 await asyncio.sleep(5)
 
     async def _handle_update(self, update: dict) -> None:
@@ -163,9 +179,9 @@ class TelegramAdapter(BaseChatAdapter):
                 try:
                     await self._on_message(event)
                 except Exception as ex:
-                    logger.error("telegram_on_message_error", error=str(ex))
+                    logger.error("telegram_on_message_error", error=self._redact(str(ex)))
 
-            asyncio.create_task(_dispatch())
+            fire_and_forget(_dispatch(), name="telegram-on-message")
 
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send message to a chat or topic."""
@@ -178,13 +194,15 @@ class TelegramAdapter(BaseChatAdapter):
 
         try:
             resp = await self._http_client.post(f"{self._api_url}/sendMessage", json=body)
-            resp.raise_for_status()
+            self._check(resp)
             data = resp.json()
             post_id = str(data.get("result", {}).get("message_id", ""))
             return post_id
         except httpx.HTTPError as e:
-            logger.error("telegram_send_reply_error", channel_id=channel_id, error=str(e))
-            raise
+            logger.error("telegram_send_reply_error", channel_id=channel_id, error=self._redact(str(e)))
+            # Re-raise redacted: the original message embeds the bot-token URL,
+            # and upstream handlers log str(exception) too.
+            raise httpx.HTTPError(self._redact(str(e))) from None
 
     async def update_reply(self, post_id: str, message: str, channel_id: str = "") -> None:
         """Edit an existing message for streaming updates."""
@@ -202,7 +220,7 @@ class TelegramAdapter(BaseChatAdapter):
             if resp.status_code not in (200, 400):
                 resp.raise_for_status()
         except httpx.HTTPError as e:
-            logger.warning("telegram_update_reply_warning", post_id=post_id, error=str(e))
+            logger.warning("telegram_update_reply_warning", post_id=post_id, error=self._redact(str(e)))
 
     async def send_typing(self, channel_id: str, parent_id: str = "") -> None:
         """Send chat action typing indicator."""
@@ -216,7 +234,7 @@ class TelegramAdapter(BaseChatAdapter):
         try:
             await self._http_client.post(f"{self._api_url}/sendChatAction", json=body)
         except Exception as e:
-            logger.warning("telegram_typing_error", error=str(e))
+            logger.warning("telegram_typing_error", error=self._redact(str(e)))
 
     async def send_post_with_files(
         self,
@@ -241,7 +259,7 @@ class TelegramAdapter(BaseChatAdapter):
                     data=data,
                     files=files,
                 )
-                resp.raise_for_status()
+                self._check(resp)
                 res = resp.json()
                 last_id = str(res.get("result", {}).get("message_id", ""))
                 # Only put caption on first document
@@ -256,7 +274,7 @@ class TelegramAdapter(BaseChatAdapter):
                 if root_id and root_id.isdigit():
                     body["message_thread_id"] = int(root_id)
                 resp = await self._http_client.post(f"{self._api_url}/sendDocument", json=body)
-                resp.raise_for_status()
+                self._check(resp)
                 res = resp.json()
                 last_id = str(res.get("result", {}).get("message_id", ""))
                 message = ""

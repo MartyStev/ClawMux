@@ -125,6 +125,7 @@ async def lifespan(app: FastAPI):
         registry.register(teams_adapter)
 
     ws_manager = WSConnectionManager()
+    await ws_manager.start()
     router = Router(mapping=mapping, ws_manager=ws_manager, providers=registry)
     ws_manager.set_proactive_handler(router.handle_proactive)
 

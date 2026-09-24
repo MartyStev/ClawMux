@@ -170,6 +170,13 @@ class Settings(BaseSettings):
         default=150,
         description="Debounce window (ms) for ClawAggregator — wait this long after last chat.final before picking the best message",
     )
+    claw_min_valid_text_len: int = Field(
+        default=5,
+        description=(
+            "Minimum length of an aggregated answer that counts as a real reply "
+            "(shorter texts are treated as placeholders unless nothing better arrives)."
+        ),
+    )
 
     # ── Attachments ───────────────────────────────────────────────────────────────
     workspace_base_path: str = Field(

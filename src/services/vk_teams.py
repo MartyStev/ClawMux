@@ -14,6 +14,7 @@ import httpx
 import structlog
 
 from src.services.chat_adapter import BaseChatAdapter, ChannelEvent
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -161,7 +162,7 @@ class VkTeamsAdapter(BaseChatAdapter):
         )
 
         if self._on_message:
-            asyncio.create_task(self._on_message(channel_event))
+            fire_and_forget(self._on_message(channel_event), name="vk-teams-on-message")
 
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send a reply to a VK Teams chat."""

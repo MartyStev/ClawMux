@@ -13,7 +13,6 @@ Routing: the request contains `external_user_id` as the user's external identifi
 The router looks up the DB row by (`external_user_id`, `provider`) and resolves
 the provider-specific `user_id` used to connect to the target OpenClaw instance.
 """
-import asyncio
 import secrets
 import uuid
 from typing import Optional
@@ -23,6 +22,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from src.core.config import settings
+from src.utils.tasks import fire_and_forget
 from src.services.mapping import (
     DEFAULT_PROVIDER,
     InstanceNotFoundError,
@@ -112,7 +112,7 @@ async def trigger(
     # 1. Resolve the correct session_key from the Mattermost channel
     # 2. Show a streaming placeholder ("⏳ Thinking (API task)...")
     # 3. Handle the response
-    asyncio.create_task(
+    fire_and_forget(
         app_router.trigger_message(
             user_id=provider_user_id,
             info=info,
@@ -120,7 +120,7 @@ async def trigger(
             session_key=req.session_key,
             provider=provider,
         ),
-        name=f"trigger-{request_id[:8]}"
+        name=f"trigger-{request_id[:8]}",
     )
 
     log.info(

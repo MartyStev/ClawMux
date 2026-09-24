@@ -10,8 +10,25 @@ All notable changes to ClawMux will be documented in this file.
   twice. Each logical send now gets one key reused across the retry, and sends
   to the same user are serialized per connection (no more reconnect stampedes
   from concurrent sends).
+- **Background tasks**: all fire-and-forget `asyncio.create_task()` call sites
+  now go through `src/utils/tasks.py:fire_and_forget()`, which keeps a strong
+  reference until completion (unreferenced tasks could be GC'd mid-flight) and
+  logs their exceptions.
+- **Telegram token leakage in logs**: bot token is now redacted from httpx
+  error strings before logging or re-raising (exception messages embed the
+  `/bot<token>/method` URL).
+- **Readiness probe fail-closed**: `/health/ready` no longer reports
+  "mattermost: ok" when the adapter cannot report `is_ws_connected`
+  (the `getattr` default was `True`).
 
 ### Changed
+- **Teams adapter**: the conversation→serviceUrl map is now LRU-bounded
+  (`OrderedDict`, cap 10000) so a long-lived bot cannot grow it unboundedly.
+- **WSConnectionManager**: the idle-cleanup loop is started via an explicit
+  `await ws_manager.start()` from the app lifespan instead of spawning a task
+  in `__init__` via the deprecated `get_event_loop()`.
+- **ClawAggregator**: the minimum "real answer" text length is now the
+  `CLAW_MIN_VALID_TEXT_LEN` setting (default 5) instead of a hardcoded value.
 - **Router state moved to the database**: last-known channels are persisted in a
   new `user_channel` table (proactive delivery now survives restarts and works
   across replicas), and mapping caches are validated against a global

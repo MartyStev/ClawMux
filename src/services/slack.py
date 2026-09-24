@@ -14,6 +14,7 @@ import structlog
 import websockets
 
 from src.services.chat_adapter import BaseChatAdapter, ChannelEvent
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -177,7 +178,9 @@ class SlackAdapter(BaseChatAdapter):
             )
 
             if self._on_message:
-                asyncio.create_task(self._on_message(channel_event))
+                fire_and_forget(
+                    self._on_message(channel_event), name="slack-on-message"
+                )
 
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send a message to a Slack channel or thread."""

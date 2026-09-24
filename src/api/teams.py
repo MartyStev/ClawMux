@@ -7,7 +7,6 @@ Receives incoming activities from Azure Bot Service / Bot Framework Connector
 and forwards them to the multi-channel Router.
 """
 
-import asyncio
 from typing import Any, Dict
 
 import structlog
@@ -16,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from src.services.chat_adapter import ChannelEvent
 from src.services.teams import TeamsAdapter
 from src.services.teams_auth import TeamsAuthError, is_allowed_service_url, verify_inbound_token
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -96,6 +96,9 @@ async def teams_webhook_messages(request: Request) -> Response:
 
     router_instance = getattr(request.app.state, "router", None)
     if router_instance:
-        asyncio.create_task(router_instance.handle_event(event))
+        fire_and_forget(
+            router_instance.handle_event(event),
+            name=f"teams-msg-{event.user_id[:8] if event.user_id else 'anon'}",
+        )
 
     return Response(status_code=200)
