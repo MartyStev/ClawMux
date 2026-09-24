@@ -21,13 +21,12 @@ from fastapi.testclient import TestClient
 
 import src.services.teams as teams_mod
 from src.core.config import settings
-from src.services.telegram import TelegramAdapter
 from src.services.teams import TeamsAdapter
+from src.services.telegram import TelegramAdapter
 from src.services.ws_manager import WSConnectionManager
-from src.utils.claw_aggregator import is_valid_text
 from src.utils import tasks as tasks_mod
+from src.utils.claw_aggregator import is_valid_text
 from src.utils.health import health_router, init_health
-
 
 # ── fire_and_forget ───────────────────────────────────────────────
 

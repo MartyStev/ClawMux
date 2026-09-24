@@ -5,6 +5,7 @@ POST /api/v1/notify
 
 Send a system message directly to a user in Mattermost.
 """
+
 import secrets
 
 import structlog
@@ -12,12 +13,12 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from src.core.config import settings
-from src.utils.tasks import fire_and_forget
 from src.services.mapping import (
     DEFAULT_PROVIDER,
     InstanceNotFoundError,
     UnsupportedProviderError,
 )
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -55,7 +56,7 @@ async def notify(
 
     provider = req.provider.strip().lower()
     log = logger.bind(external_user_id=req.external_user_id, provider=provider)
-    
+
     mapping = request.app.state.mapping
     app_router = request.app.state.router
 
@@ -68,16 +69,16 @@ async def notify(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Provider is not enabled: {e.provider!r}",
-        )
-    except InstanceNotFoundError:
+        ) from e
+    except InstanceNotFoundError as e:
         log.warning("notify_external_user_not_found")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No mapping for external_user_id={req.external_user_id!r}",
-        )
+        ) from e
 
     log = log.bind(provider_user_id=provider_user_id)
-    
+
     # Launch the send task in the background without blocking the API response
     fire_and_forget(
         app_router.handle_proactive(

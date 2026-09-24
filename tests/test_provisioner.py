@@ -1,21 +1,24 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from src.core.config import settings
 from src.services.mapping import DeviceCredentials, InstanceInfo
-from src.services.provisioner import InstanceProvisioner, ProvisioningError
+from src.services.provisioner import InstanceProvisioner
 
 
 @pytest.mark.anyio
 async def test_provision_mock_driver():
     mapping = MagicMock()
-    mapping.bind_user_instance = AsyncMock(return_value=InstanceInfo(
-        instance_url="ws://localhost:18789/ws",
-        credentials=DeviceCredentials("dev", "pub", "priv", "dt", "gt"),
-    ))
+    mapping.bind_user_instance = AsyncMock(
+        return_value=InstanceInfo(
+            instance_url="ws://localhost:18789/ws",
+            credentials=DeviceCredentials("dev", "pub", "priv", "dt", "gt"),
+        )
+    )
 
     provisioner = InstanceProvisioner(mapping)
-    
+
     with patch.object(settings, "provisioning_driver", "mock"):
         info = await provisioner.provision_instance("telegram", "user_123")
         assert info.instance_url == "ws://localhost:18789/ws"
@@ -28,10 +31,12 @@ async def test_provision_mock_driver():
 @pytest.mark.anyio
 async def test_provision_webhook_driver():
     mapping = MagicMock()
-    mapping.bind_user_instance = AsyncMock(return_value=InstanceInfo(
-        instance_url="ws://spawned-host:18789/ws",
-        credentials=DeviceCredentials("dev", "pub", "priv", "dt", "gt"),
-    ))
+    mapping.bind_user_instance = AsyncMock(
+        return_value=InstanceInfo(
+            instance_url="ws://spawned-host:18789/ws",
+            credentials=DeviceCredentials("dev", "pub", "priv", "dt", "gt"),
+        )
+    )
 
     provisioner = InstanceProvisioner(mapping)
 
@@ -47,13 +52,14 @@ async def test_provision_webhook_driver():
             "private_key_b64": "priv",
             "device_token": "dt",
             "gateway_token": "gt",
-        }
+        },
     }
 
-    with patch.object(settings, "provisioning_driver", "webhook"), \
-         patch.object(settings, "provisioning_webhook_url", "http://orchestrator/api/spawn"), \
-         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        
+    with (
+        patch.object(settings, "provisioning_driver", "webhook"),
+        patch.object(settings, "provisioning_webhook_url", "http://orchestrator/api/spawn"),
+        patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post,
+    ):
         mock_post.return_value = mock_resp
         info = await provisioner.provision_instance("slack", "U9999")
 

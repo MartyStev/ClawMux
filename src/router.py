@@ -11,31 +11,33 @@ the user has not sent a message recently.
 """
 
 import asyncio
-import httpx
 import random
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
+import httpx
 import structlog
 
 from src.core.config import settings
 from src.services.chat_adapter import BaseChatAdapter, ChannelEvent, ProviderRegistry
 from src.services.dify_client import DifyClient
-from src.services.file_manager import FileManager, build_attachment_context, container_path_to_host, extract_uuid_from_instance_url
+from src.services.file_manager import (
+    FileManager,
+    build_attachment_context,
+    container_path_to_host,
+    extract_uuid_from_instance_url,
+)
 from src.services.mapping import (
     DEFAULT_PROVIDER,
-    MappingStorage,
-    InstanceNotFoundError,
     InstanceInfo,
+    InstanceNotFoundError,
+    MappingStorage,
 )
-from src.services.mattermost import MattermostClient, MattermostEvent
-from src.utils.metrics import messages_total, request_duration, ws_errors_total
+from src.services.provisioner import InstanceProvisioner
 from src.services.ws_manager import WSConnectionManager
+from src.utils.metrics import messages_total, request_duration, ws_errors_total
 
 logger = structlog.get_logger(__name__)
-
-
-from src.services.provisioner import InstanceProvisioner, ProvisioningError
 
 
 class StreamUpdater:
@@ -84,8 +86,8 @@ class Router:
         self,
         mapping: MappingStorage,
         ws_manager: WSConnectionManager,
-        mattermost: Optional[Any] = None,
-        providers: Optional[ProviderRegistry] = None,
+        mattermost: Any | None = None,
+        providers: ProviderRegistry | None = None,
     ):
         self.mapping = mapping
         self.ws_manager = ws_manager
@@ -109,9 +111,9 @@ class Router:
         # Fast-path cache for last known channel per identity key — the source
         # of truth is the user_channel table (survives restarts, shared across
         # replicas), this dict only avoids a DB read on the proactive path.
-        self._user_channels: Dict[str, str] = {}
+        self._user_channels: dict[str, str] = {}
         # Dify fallback — active only when DIFY_API_KEY is configured
-        self._dify: Optional[DifyClient] = (
+        self._dify: DifyClient | None = (
             DifyClient(
                 base_url=settings.dify_base_url,
                 api_key=settings.dify_api_key,
@@ -121,7 +123,7 @@ class Router:
             else None
         )
 
-    def get_adapter(self, provider: str) -> Optional[BaseChatAdapter]:
+    def get_adapter(self, provider: str) -> BaseChatAdapter | None:
         adapter = self.providers.get(provider)
         if adapter is None:
             if provider == DEFAULT_PROVIDER or not provider:
@@ -139,7 +141,7 @@ class Router:
     @staticmethod
     def _provider_user_id(identity_key: str, provider: str) -> str:
         prefix = f"{provider}:"
-        return identity_key[len(prefix):] if identity_key.startswith(prefix) else identity_key
+        return identity_key[len(prefix) :] if identity_key.startswith(prefix) else identity_key
 
     async def handle_event(self, event: ChannelEvent) -> None:
         """
@@ -168,9 +170,7 @@ class Router:
         )
 
         # Always update channel mapping so proactive messages know where to go
-        await self._remember_channel(
-            identity_key, event.provider, event.user_id, event.channel_id
-        )
+        await self._remember_channel(identity_key, event.provider, event.user_id, event.channel_id)
 
         # Use cached InstanceInfo if WS connection already exists — avoids a
         # DB round-trip on every message for connected users.
@@ -200,9 +200,15 @@ class Router:
                         log.info("auto_provisioning_success")
                         if placeholder_id:
                             if event.provider == "mattermost":
-                                await adapter.update_reply(placeholder_id, "✅ Workspace ready! Processing your message...")
+                                await adapter.update_reply(
+                                    placeholder_id, "✅ Workspace ready! Processing your message..."
+                                )
                             else:
-                                await adapter.update_reply(placeholder_id, "✅ Workspace ready! Processing your message...", channel_id=event.channel_id)
+                                await adapter.update_reply(
+                                    placeholder_id,
+                                    "✅ Workspace ready! Processing your message...",
+                                    channel_id=event.channel_id,
+                                )
                     except Exception as e:
                         log.error("auto_provisioning_failed", error=str(e))
                         messages_total.labels(status="provisioning_failed").inc()
@@ -223,8 +229,7 @@ class Router:
                     messages_total.labels(status="unmapped").inc()
                     await adapter.send_reply(
                         event.channel_id,
-                        "⚠️ No OpenClaw instance is assigned to your account. "
-                        "Please contact the administrator.",
+                        "⚠️ No OpenClaw instance is assigned to your account. Please contact the administrator.",
                         root_id=root_id,
                     )
                     return
@@ -237,9 +242,7 @@ class Router:
             uuid = extract_uuid_from_instance_url(info.instance_url)
             if uuid:
                 try:
-                    downloaded = await self.file_manager.download_attachments(
-                        event.file_ids, uuid
-                    )
+                    downloaded = await self.file_manager.download_attachments(event.file_ids, uuid)
                     attachment_context = build_attachment_context(downloaded)
                     if attachment_context:
                         if not message_text.strip():
@@ -272,9 +275,7 @@ class Router:
         placeholder_text = random.choice(thinking_phrases)
         placeholder_id = ""
         try:
-            placeholder_id = await adapter.send_reply(
-                event.channel_id, placeholder_text, root_id=root_id
-            )
+            placeholder_id = await adapter.send_reply(event.channel_id, placeholder_text, root_id=root_id)
         except Exception as e:
             log.warning("failed_to_create_placeholder", error=str(e))
 
@@ -305,9 +306,7 @@ class Router:
                             host_path = container_path_to_host(container_path, uuid)
                             if host_path:
                                 if event.provider == "mattermost" and self.file_manager:
-                                    fid = await self.file_manager.upload_to_mattermost(
-                                        host_path, event.channel_id
-                                    )
+                                    fid = await self.file_manager.upload_to_mattermost(host_path, event.channel_id)
                                     if fid:
                                         uploaded_file_ids.append(fid)
                                 else:
@@ -365,9 +364,7 @@ class Router:
             typing_task.cancel()
             request_duration.observe(time.monotonic() - _t_start)
 
-    async def _remember_channel(
-        self, identity_key: str, provider: str, provider_user_id: str, channel_id: str
-    ) -> None:
+    async def _remember_channel(self, identity_key: str, provider: str, provider_user_id: str, channel_id: str) -> None:
         """Cache the last known channel locally and persist it to the DB.
 
         A DB failure must never break message routing, so it is only logged.
@@ -397,7 +394,7 @@ class Router:
         self,
         event: ChannelEvent,
         log,
-        adapter: Optional[Any] = None,
+        adapter: Any | None = None,
     ) -> None:
         """
         Route a message to Dify when the user has no OpenClaw instance.
@@ -425,9 +422,7 @@ class Router:
         placeholder_text = random.choice(thinking_phrases)
         placeholder_id = ""
         try:
-            placeholder_id = await adapter.send_reply(
-                event.channel_id, placeholder_text, root_id=root_id
-            )
+            placeholder_id = await adapter.send_reply(event.channel_id, placeholder_text, root_id=root_id)
         except Exception as e:
             log.warning("dify_fallback_placeholder_failed", error=str(e))
 
@@ -512,7 +507,7 @@ class Router:
         user_id: str,
         info: InstanceInfo,
         text: str,
-        session_key: Optional[str] = None,
+        session_key: str | None = None,
         provider: str = DEFAULT_PROVIDER,
     ) -> None:
         """
@@ -532,11 +527,7 @@ class Router:
         try:
             log.info("triggering_message")
             response, media_paths = await self.ws_manager.send_message(
-                user_id=identity_key,
-                info=info,
-                message=text,
-                session_key=session_key,
-                on_stream=None
+                user_id=identity_key, info=info, message=text, session_key=session_key, on_stream=None
             )
 
             if response:

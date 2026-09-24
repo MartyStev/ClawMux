@@ -17,7 +17,6 @@ import os
 import shutil
 import sys
 import time
-from typing import List
 
 # Ensure ClawMux root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -52,7 +51,7 @@ def sync_instance_workspace(
             print(f"   ⚠️ Backup failed: {e}", file=sys.stderr)
 
     synced_files = 0
-    for root, dirs, files in os.walk(template_dir):
+    for root, _dirs, files in os.walk(template_dir):
         rel_path = os.path.relpath(root, template_dir)
         target_dir = os.path.join(workspace_dir, rel_path) if rel_path != "." else workspace_dir
 
@@ -69,7 +68,7 @@ def sync_instance_workspace(
                 print(f"   [DRY-RUN] Would update: {rel_file_path}")
             else:
                 try:
-                    with open(src_file, "r", encoding="utf-8") as f:
+                    with open(src_file, encoding="utf-8") as f:
                         content = f.read()
                     content = content.replace("{{UUID}}", instance_uuid)
                     with open(dst_file, "w", encoding="utf-8") as f:
@@ -84,7 +83,7 @@ def sync_instance_workspace(
     return True
 
 
-def discover_instance_uuids(base_configs_path: str) -> List[str]:
+def discover_instance_uuids(base_configs_path: str) -> list[str]:
     """Find all instance UUID directories inside configs base path."""
     if not os.path.exists(base_configs_path):
         return []
@@ -101,8 +100,12 @@ def main():
     parser = argparse.ArgumentParser(description="Synchronize OpenClaw workspace templates across instances.")
     parser.add_argument("--all", action="store_true", help="Sync all existing instances in workspace base directory.")
     parser.add_argument("--instance-uuid", type=str, help="Sync a specific instance UUID.")
-    parser.add_argument("--template-dir", type=str, default=settings.workspace_template_path, help="Path to master template folder.")
-    parser.add_argument("--base-path", type=str, default=settings.workspace_base_path, help="Path to instances workspace root.")
+    parser.add_argument(
+        "--template-dir", type=str, default=settings.workspace_template_path, help="Path to master template folder."
+    )
+    parser.add_argument(
+        "--base-path", type=str, default=settings.workspace_base_path, help="Path to instances workspace root."
+    )
     parser.add_argument("--dry-run", action="store_true", help="Simulate updates without writing files.")
     parser.add_argument("--no-backup", action="store_true", help="Disable automatic backups before overwriting.")
     parser.add_argument(
@@ -130,7 +133,7 @@ def main():
         print(f"❌ Error: Master template directory not found at: {template_dir}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"🚀 ClawMux Workspace Template Synchronizer")
+    print("🚀 ClawMux Workspace Template Synchronizer")
     print(f"📂 Template Directory : {template_dir}")
     print(f"🗂️  Instances Base Path: {base_path}")
     print(f"⚙️  Dry Run Mode      : {args.dry_run}")

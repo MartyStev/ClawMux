@@ -8,7 +8,8 @@ Connects to VK Teams (Myteam) Bot API using httpx to:
 """
 
 import asyncio
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 import structlog
@@ -33,10 +34,10 @@ class VkTeamsAdapter(BaseChatAdapter):
         self._api_url = api_url.rstrip("/")
         self._http_client = httpx.AsyncClient(timeout=35.0)
         self._running = False
-        self._listen_task: Optional[asyncio.Task] = None
+        self._listen_task: asyncio.Task | None = None
         self._last_event_id = 0
         self._bot_user_id = ""
-        self._on_message: Optional[Callable[[ChannelEvent], Awaitable[None]]] = None
+        self._on_message: Callable[[ChannelEvent], Awaitable[None]] | None = None
 
     @property
     def name(self) -> str:
@@ -95,7 +96,7 @@ class VkTeamsAdapter(BaseChatAdapter):
         """Continuously long-poll for updates from VK Teams."""
         while self._running:
             try:
-                params = {
+                params: dict[str, Any] = {
                     "token": self._token,
                     "lastEventId": self._last_event_id,
                     "pollTime": 25,
@@ -122,7 +123,7 @@ class VkTeamsAdapter(BaseChatAdapter):
                 logger.error("vk_teams_poll_exception", error=str(e))
                 await asyncio.sleep(3)
 
-    async def _handle_event(self, event_data: Dict[str, Any]) -> None:
+    async def _handle_event(self, event_data: dict[str, Any]) -> None:
         """Process a single event from VK Teams."""
         ev_type = event_data.get("type")
         payload = event_data.get("payload", {})
@@ -167,7 +168,7 @@ class VkTeamsAdapter(BaseChatAdapter):
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send a reply to a VK Teams chat."""
         try:
-            params: Dict[str, Any] = {
+            params: dict[str, Any] = {
                 "token": self._token,
                 "chatId": channel_id,
                 "text": message,
@@ -227,7 +228,7 @@ class VkTeamsAdapter(BaseChatAdapter):
         self,
         channel_id: str,
         message: str,
-        file_ids_or_paths: List[str],
+        file_ids_or_paths: list[str],
         root_id: str = "",
     ) -> str:
         """Send post with file attachments to VK Teams."""

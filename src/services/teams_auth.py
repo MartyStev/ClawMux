@@ -8,7 +8,6 @@ Two defenses for POST /api/v1/teams/messages:
      adapter's OAuth token is never sent to an attacker-controlled URL (SSRF).
 """
 
-from typing import Dict, Optional
 from urllib.parse import urlparse
 
 import jwt
@@ -24,7 +23,7 @@ class TeamsAuthError(Exception):
     """Raised when an inbound Teams request fails verification."""
 
 
-_jwk_clients: Dict[str, PyJWKClient] = {}
+_jwk_clients: dict[str, PyJWKClient] = {}
 
 
 def _split_csv(value: str) -> list[str]:
@@ -37,7 +36,7 @@ def _get_jwk_client(url: str) -> PyJWKClient:
     return _jwk_clients[url]
 
 
-def verify_inbound_token(authorization: Optional[str]) -> None:
+def verify_inbound_token(authorization: str | None) -> None:
     """
     Verify the `Authorization: Bearer <jwt>` header of an inbound activity.
 
@@ -46,20 +45,18 @@ def verify_inbound_token(authorization: Optional[str]) -> None:
     """
     audience = settings.teams_jwt_audience.strip() or settings.teams_app_id.strip()
     if not audience:
-        raise TeamsAuthError(
-            "Teams inbound verification disabled: TEAMS_APP_ID/TEAMS_JWT_AUDIENCE not configured"
-        )
+        raise TeamsAuthError("Teams inbound verification disabled: TEAMS_APP_ID/TEAMS_JWT_AUDIENCE not configured")
 
     if not authorization or not authorization.startswith("Bearer "):
         raise TeamsAuthError("Missing Bearer token")
-    token = authorization[len("Bearer "):].strip()
+    token = authorization[len("Bearer ") :].strip()
     if not token:
         raise TeamsAuthError("Empty Bearer token")
 
     issuers = _split_csv(settings.teams_allowed_issuers)
     jwks_urls = _split_csv(settings.teams_jwks_urls)
 
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     for jwks_url in jwks_urls:
         try:
             signing_key = _get_jwk_client(jwks_url).get_signing_key_from_jwt(token)

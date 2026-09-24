@@ -34,9 +34,7 @@ async def main(dry_run: bool) -> int:
         return 1
 
     async with engine.begin() as conn:
-        rows = (
-            await conn.execute(text(f"SELECT instance_uuid, {_RAW_SELECT} FROM instance"))
-        ).mappings().all()
+        rows = (await conn.execute(text(f"SELECT instance_uuid, {_RAW_SELECT} FROM instance"))).mappings().all()
 
         updated = 0
         for row in rows:

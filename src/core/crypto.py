@@ -10,8 +10,6 @@ zero-downtime rollout: set the key, then run
 `scripts/encrypt_existing_credentials.py` to re-encrypt old rows.
 """
 
-from typing import Optional
-
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
@@ -20,8 +18,8 @@ from src.core.config import settings
 
 PREFIX = "fernet:v1:"
 
-_fernet: Optional[Fernet] = None
-_fernet_key_source: Optional[str] = None
+_fernet: Fernet | None = None
+_fernet_key_source: str | None = None
 
 
 class CredentialEncryptionError(RuntimeError):
@@ -33,16 +31,13 @@ def _get_fernet() -> Fernet:
     key = settings.credential_encryption_key.strip()
     if not key:
         raise CredentialEncryptionError(
-            "CREDENTIAL_ENCRYPTION_KEY is not configured but an encrypted "
-            "credential was encountered"
+            "CREDENTIAL_ENCRYPTION_KEY is not configured but an encrypted credential was encountered"
         )
     if _fernet is None or _fernet_key_source != key:
         try:
             _fernet = Fernet(key.encode())
         except (ValueError, TypeError) as e:
-            raise CredentialEncryptionError(
-                f"CREDENTIAL_ENCRYPTION_KEY is not a valid Fernet key: {e}"
-            ) from e
+            raise CredentialEncryptionError(f"CREDENTIAL_ENCRYPTION_KEY is not a valid Fernet key: {e}") from e
         _fernet_key_source = key
     return _fernet
 
@@ -64,7 +59,7 @@ def decrypt_secret(value: str) -> str:
     if not is_encrypted(value):
         return value
     try:
-        return _get_fernet().decrypt(value[len(PREFIX):].encode()).decode()
+        return _get_fernet().decrypt(value[len(PREFIX) :].encode()).decode()
     except InvalidToken as e:
         raise CredentialEncryptionError(
             "Failed to decrypt credential — CREDENTIAL_ENCRYPTION_KEY does not "

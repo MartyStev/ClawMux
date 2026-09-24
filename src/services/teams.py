@@ -10,7 +10,8 @@ Connects to Microsoft Bot Framework / Azure Bot Service REST API to:
 
 import time
 from collections import OrderedDict
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 import structlog
@@ -42,8 +43,8 @@ class TeamsAdapter(BaseChatAdapter):
         self._access_token = ""
         self._token_expires_at = 0.0
         self._running = False
-        self._service_urls: "OrderedDict[str, str]" = OrderedDict()  # conversation_id -> serviceUrl (LRU-bounded)
-        self._on_message: Optional[Callable[[ChannelEvent], Awaitable[None]]] = None
+        self._service_urls: OrderedDict[str, str] = OrderedDict()  # conversation_id -> serviceUrl (LRU-bounded)
+        self._on_message: Callable[[ChannelEvent], Awaitable[None]] | None = None
 
     @property
     def name(self) -> str:
@@ -128,7 +129,7 @@ class TeamsAdapter(BaseChatAdapter):
             service_url = self.get_service_url(channel_id)
             url = f"{service_url}/v3/conversations/{channel_id}/activities"
 
-            activity: Dict[str, Any] = {
+            activity: dict[str, Any] = {
                 "type": "message",
                 "text": message,
             }
@@ -185,7 +186,7 @@ class TeamsAdapter(BaseChatAdapter):
         self,
         channel_id: str,
         message: str,
-        file_ids_or_paths: List[str],
+        file_ids_or_paths: list[str],
         root_id: str = "",
     ) -> str:
         """Send message with attachments to Teams."""

@@ -7,8 +7,6 @@ Receives incoming activities from Azure Bot Service / Bot Framework Connector
 and forwards them to the multi-channel Router.
 """
 
-from typing import Any, Dict
-
 import structlog
 from fastapi import APIRouter, HTTPException, Request, Response
 
@@ -32,7 +30,7 @@ async def teams_webhook_messages(request: Request) -> Response:
         verify_inbound_token(request.headers.get("authorization"))
     except TeamsAuthError as e:
         logger.warning("teams_webhook_unauthorized", error=str(e))
-        raise HTTPException(status_code=401, detail="Unauthorized activity")
+        raise HTTPException(status_code=401, detail="Unauthorized activity") from e
 
     try:
         activity = await request.json()

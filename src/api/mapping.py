@@ -9,6 +9,7 @@ Authentication: `X-Api-Token` header.
 """
 
 import secrets
+
 import structlog
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel

@@ -10,6 +10,9 @@ Manages lifecycle of all components:
 """
 
 import asyncio
+
+# ── Structured Logging Setup ─────────────────────────────────────
+import logging
 from contextlib import asynccontextmanager
 
 import structlog
@@ -17,28 +20,25 @@ import uvicorn
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 
+from src.api.bitrix import router as bitrix_router
+from src.api.mapping import router as mapping_router
+from src.api.mm_action import router as mm_action_router
+from src.api.notify import router as notify_router
+from src.api.teams import router as teams_router
+from src.api.trigger import router as trigger_router
 from src.core.config import settings
 from src.core.database import dispose_engine
-from src.utils.health import health_router, init_health
+from src.router import Router
+from src.services.bitrix import BitrixAdapter
 from src.services.chat_adapter import ProviderRegistry
 from src.services.mapping import MappingStorage
 from src.services.mattermost import MattermostClient
-from src.services.telegram import TelegramAdapter
-from src.services.bitrix import BitrixAdapter
 from src.services.slack import SlackAdapter
-from src.services.vk_teams import VkTeamsAdapter
 from src.services.teams import TeamsAdapter
-from src.api.trigger import router as trigger_router
-from src.api.mm_action import router as mm_action_router
-from src.api.notify import router as notify_router
-from src.api.mapping import router as mapping_router
-from src.api.bitrix import router as bitrix_router
-from src.api.teams import router as teams_router
-from src.router import Router
+from src.services.telegram import TelegramAdapter
+from src.services.vk_teams import VkTeamsAdapter
 from src.services.ws_manager import WSConnectionManager
-
-# ── Structured Logging Setup ─────────────────────────────────────
-import logging
+from src.utils.health import health_router, init_health
 
 _log_level_int = getattr(logging, settings.log_level.upper(), logging.INFO)
 
@@ -49,9 +49,7 @@ structlog.configure(
         structlog.processors.StackInfoRenderer(),
         structlog.dev.set_exc_info,
         structlog.processors.TimeStamper(fmt="iso"),
-        structlog.dev.ConsoleRenderer()
-        if settings.log_level == "DEBUG"
-        else structlog.processors.JSONRenderer(),
+        structlog.dev.ConsoleRenderer() if settings.log_level == "DEBUG" else structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(_log_level_int),
     context_class=dict,

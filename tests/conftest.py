@@ -16,8 +16,8 @@ def _compile_now_sqlite(element, compiler, **kw):  # noqa: ANN001, ARG001
 
 @pytest.fixture()
 def sqlite_db(monkeypatch):
-    from src.core.models import Base
     import src.services.mapping as mapping_module
+    from src.core.models import Base
 
     engine = create_async_engine(
         "sqlite+aiosqlite://",

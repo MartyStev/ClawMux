@@ -4,8 +4,8 @@ ClawMux — Configuration.
 All settings are loaded from environment variables (or an .env file).
 """
 
-from pydantic_settings import BaseSettings
 from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -228,10 +228,7 @@ class Settings(BaseSettings):
     )
     mm_action_proxy_url: str = Field(
         default="http://tools-server:3000/mm/action",
-        description=(
-            "Internal endpoint used by /api/v1/mm/action proxy for Mattermost "
-            "interactive buttons."
-        ),
+        description=("Internal endpoint used by /api/v1/mm/action proxy for Mattermost interactive buttons."),
     )
     mm_action_shared_secret: str = Field(
         default="",

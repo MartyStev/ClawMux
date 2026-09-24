@@ -9,7 +9,6 @@ Drivers supported:
 
 import asyncio
 import uuid
-from typing import Optional
 
 import httpx
 import structlog
@@ -22,6 +21,7 @@ logger = structlog.get_logger(__name__)
 
 class ProvisioningError(Exception):
     """Raised when instance provisioning fails or times out."""
+
     pass
 
 
@@ -80,7 +80,7 @@ class InstanceProvisioner:
         """Generate mock instance info instantly for testing."""
         inst_uuid = str(uuid.uuid4())
         mock_info = InstanceInfo(
-            instance_url=f"ws://localhost:18789/ws",
+            instance_url="ws://localhost:18789/ws",
             credentials=DeviceCredentials(
                 device_id=f"dev-mock-{user_id[:8]}",
                 public_key_b64="mock-public-key-b64",
@@ -163,7 +163,7 @@ class InstanceProvisioner:
             await asyncio.to_thread(os.makedirs, dest_dir, exist_ok=True)
 
             def copy_and_substitute(src_root: str, dst_root: str) -> None:
-                for root, dirs, files in os.walk(src_root):
+                for root, _dirs, files in os.walk(src_root):
                     rel_path = os.path.relpath(root, src_root)
                     target_dir = os.path.join(dst_root, rel_path) if rel_path != "." else dst_root
                     os.makedirs(target_dir, exist_ok=True)
@@ -173,7 +173,7 @@ class InstanceProvisioner:
                         dst_file = os.path.join(target_dir, file)
 
                         try:
-                            with open(src_file, "r", encoding="utf-8") as f:
+                            with open(src_file, encoding="utf-8") as f:
                                 content = f.read()
                             content = (
                                 content.replace("{{USER_ID}}", user_id)

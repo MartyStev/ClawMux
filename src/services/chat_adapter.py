@@ -6,8 +6,8 @@ and the registry coordinating active adapters.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Dict, List, Optional, Set
 
 import structlog
 
@@ -22,7 +22,7 @@ class ChannelEvent:
     channel_id: str
     text: str
     post_id: str
-    file_ids: List[str] = field(default_factory=list)
+    file_ids: list[str] = field(default_factory=list)
     provider: str = "mattermost"
     root_id: str = ""
 
@@ -84,7 +84,7 @@ class BaseChatAdapter(ABC):
         self,
         channel_id: str,
         message: str,
-        file_ids_or_paths: List[str],
+        file_ids_or_paths: list[str],
         root_id: str = "",
     ) -> str:
         """Send a message with file attachments."""
@@ -100,7 +100,7 @@ class ProviderRegistry:
     """Registry managing active chat platform adapters."""
 
     def __init__(self) -> None:
-        self._adapters: Dict[str, BaseChatAdapter] = {}
+        self._adapters: dict[str, BaseChatAdapter] = {}
 
     def register(self, adapter: BaseChatAdapter) -> None:
         """Register a chat adapter instance."""
@@ -108,7 +108,8 @@ class ProviderRegistry:
         raw_name = adapter.__dict__.get("name", getattr(type(adapter), "name", "mattermost"))
         if isinstance(raw_name, property):
             try:
-                raw_name = raw_name.fget(adapter)
+                fget = raw_name.fget
+                raw_name = fget(adapter) if fget else "mattermost"
             except Exception:
                 raw_name = "mattermost"
         elif not isinstance(raw_name, str):
@@ -117,15 +118,15 @@ class ProviderRegistry:
         self._adapters[name] = adapter
         logger.info("provider_adapter_registered", provider=name)
 
-    def get(self, name: str) -> Optional[BaseChatAdapter]:
+    def get(self, name: str) -> BaseChatAdapter | None:
         """Retrieve adapter by name."""
         return self._adapters.get(name.strip().lower())
 
-    def all(self) -> List[BaseChatAdapter]:
+    def all(self) -> list[BaseChatAdapter]:
         """List all registered adapters."""
         return list(self._adapters.values())
 
-    def supported_providers(self) -> Set[str]:
+    def supported_providers(self) -> set[str]:
         """Return all registered provider names."""
         return set(self._adapters.keys())
 

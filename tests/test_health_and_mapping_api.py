@@ -1,11 +1,10 @@
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.api.mapping import router as mapping_router
-from src.api.notify import router as notify_router
-from src.api.trigger import router as trigger_router
 from src.utils.health import health_router, init_health
 
 

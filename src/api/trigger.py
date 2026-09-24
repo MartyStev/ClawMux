@@ -13,21 +13,21 @@ Routing: the request contains `external_user_id` as the user's external identifi
 The router looks up the DB row by (`external_user_id`, `provider`) and resolves
 the provider-specific `user_id` used to connect to the target OpenClaw instance.
 """
+
 import secrets
 import uuid
-from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from src.core.config import settings
-from src.utils.tasks import fire_and_forget
 from src.services.mapping import (
     DEFAULT_PROVIDER,
     InstanceNotFoundError,
     UnsupportedProviderError,
 )
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -41,12 +41,12 @@ class TriggerRequest(BaseModel):
     external_user_id: str
     provider: str = DEFAULT_PROVIDER
     text: str
-    session_key: Optional[str] = None  # default: "agent:main:main"
+    session_key: str | None = None  # default: "agent:main:main"
 
 
 class TriggerResponse(BaseModel):
-    status: str       # "sent"
-    request_id: str   # UUID for tracing in logs
+    status: str  # "sent"
+    request_id: str  # UUID for tracing in logs
 
 
 # ── Endpoint ─────────────────────────────────────────────────────
@@ -74,7 +74,6 @@ async def trigger(
             detail="Invalid or missing API token",
         )
 
-    ws_manager = request.app.state.ws_manager
     mapping = request.app.state.mapping
 
     request_id = str(uuid.uuid4())
@@ -95,19 +94,19 @@ async def trigger(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Provider is not enabled: {e.provider!r}",
-        )
-    except InstanceNotFoundError:
+        ) from e
+    except InstanceNotFoundError as e:
         log.warning("trigger_external_user_not_found")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No OpenClaw instance configured for external_user_id={req.external_user_id!r}",
-        )
+        ) from e
 
     log = log.bind(provider_user_id=provider_user_id)
 
     # ── Dispatch to Router for processing and UI feedback ────────
     app_router = request.app.state.router
-    
+
     # We pass the trigger logic to the router so it can:
     # 1. Resolve the correct session_key from the Mattermost channel
     # 2. Show a streaming placeholder ("⏳ Thinking (API task)...")

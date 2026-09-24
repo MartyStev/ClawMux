@@ -20,7 +20,6 @@ from fastapi.testclient import TestClient
 from src.core.config import settings
 from src.core.crypto import PREFIX, encrypt_secret, is_encrypted
 
-
 # ── Teams: JWT verification ─────────────────────────────────────────
 
 
@@ -346,10 +345,7 @@ def test_credentials_encrypted_at_rest(sqlite_db, monkeypatch):
         async with sqlite_db() as session:
             row = (
                 await session.execute(
-                    text(
-                        "SELECT private_key_b64, device_token, gateway_token, public_key_b64 "
-                        "FROM instance"
-                    )
+                    text("SELECT private_key_b64, device_token, gateway_token, public_key_b64 FROM instance")
                 )
             ).one()
         return row

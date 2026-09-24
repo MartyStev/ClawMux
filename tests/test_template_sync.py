@@ -1,7 +1,6 @@
-import os
-import shutil
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.core.config import settings
 from src.services.provisioner import InstanceProvisioner
@@ -22,9 +21,10 @@ async def test_seed_workspace_template(tmp_path):
     mapping = MagicMock()
     provisioner = InstanceProvisioner(mapping)
 
-    with patch.object(settings, "workspace_template_path", str(template_dir)), \
-         patch.object(settings, "workspace_base_path", str(base_configs_dir)):
-
+    with (
+        patch.object(settings, "workspace_template_path", str(template_dir)),
+        patch.object(settings, "workspace_base_path", str(base_configs_dir)),
+    ):
         await provisioner._seed_workspace_template("inst-uuid-777", "telegram", "user-999")
 
         dest_workspace = base_configs_dir / "inst-uuid-777" / "workspace"

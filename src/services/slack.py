@@ -7,7 +7,8 @@ and uses Slack REST API for posting and updating messages (streaming responses).
 
 import asyncio
 import json
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 import structlog
@@ -38,10 +39,10 @@ class SlackAdapter(BaseChatAdapter):
             timeout=30.0,
         )
         self._running = False
-        self._ws_task: Optional[asyncio.Task] = None
+        self._ws_task: asyncio.Task | None = None
         self._ws_connected = False
         self._bot_user_id = ""
-        self._on_message: Optional[Callable[[ChannelEvent], Awaitable[None]]] = None
+        self._on_message: Callable[[ChannelEvent], Awaitable[None]] | None = None
 
     @property
     def name(self) -> str:
@@ -141,7 +142,7 @@ class SlackAdapter(BaseChatAdapter):
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 2, 60.0)
 
-    async def _handle_events_api(self, payload: Dict[str, Any]) -> None:
+    async def _handle_events_api(self, payload: dict[str, Any]) -> None:
         """Process an Events API payload from Socket Mode."""
         event = payload.get("event", {})
         event_type = event.get("type")
@@ -178,13 +179,11 @@ class SlackAdapter(BaseChatAdapter):
             )
 
             if self._on_message:
-                fire_and_forget(
-                    self._on_message(channel_event), name="slack-on-message"
-                )
+                fire_and_forget(self._on_message(channel_event), name="slack-on-message")
 
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send a message to a Slack channel or thread."""
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "channel": channel_id,
             "text": message,
         }
@@ -227,7 +226,7 @@ class SlackAdapter(BaseChatAdapter):
         self,
         channel_id: str,
         message: str,
-        file_ids_or_paths: List[str],
+        file_ids_or_paths: list[str],
         root_id: str = "",
     ) -> str:
         """Send message with files or download links to Slack."""

@@ -2,7 +2,7 @@ import asyncio
 from unittest.mock import ANY, AsyncMock, MagicMock
 
 from src.router import Router
-from src.services.mapping import InstanceInfo, InstanceNotFoundError, DeviceCredentials
+from src.services.mapping import DeviceCredentials, InstanceInfo, InstanceNotFoundError
 from src.services.mattermost import MattermostEvent
 
 
@@ -28,12 +28,14 @@ def test_trigger_message_sends_to_ws_manager():
         ),
     )
 
-    asyncio.run(router.trigger_message(
-        user_id="user-1",
-        info=info,
-        text="test message",
-        session_key="test:session",
-    ))
+    asyncio.run(
+        router.trigger_message(
+            user_id="user-1",
+            info=info,
+            text="test message",
+            session_key="test:session",
+        )
+    )
 
     ws_manager.send_message.assert_called_once_with(
         user_id="mattermost:user-1",

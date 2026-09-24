@@ -7,19 +7,27 @@ collected mid-execution, and any exception dies silently.
 """
 
 import asyncio
-from typing import Coroutine, Optional, Set
+from collections.abc import Awaitable, Coroutine
+from typing import Any
 
 import structlog
 
 logger = structlog.get_logger(__name__)
 
 # Module-level registry — prevents GC of in-flight background tasks.
-_background_tasks: Set[asyncio.Task] = set()
+_background_tasks: set[asyncio.Task] = set()
 
 
-def fire_and_forget(coro: Coroutine, *, name: Optional[str] = None) -> asyncio.Task:
+def fire_and_forget(coro: Awaitable[Any], *, name: str | None = None) -> asyncio.Task:
     """Schedule *coro* as a background task, log its error on failure."""
-    task = asyncio.create_task(coro, name=name)
+    if isinstance(coro, Coroutine):
+        task = asyncio.create_task(coro, name=name)
+    else:
+
+        async def _wrap() -> Any:
+            return await coro
+
+        task = asyncio.create_task(_wrap(), name=name)
     _background_tasks.add(task)
 
     def _done(t: asyncio.Task) -> None:

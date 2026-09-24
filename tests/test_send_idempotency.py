@@ -3,10 +3,9 @@
 import asyncio
 import json
 
+from src.services import ws_manager as ws_mod
 from src.services.mapping import DeviceCredentials, InstanceInfo
 from src.services.openclaw_client import OpenClawClient
-from src.services import ws_manager as ws_mod
-
 
 # ── Client level: real OpenClawClient.send_message against a fake WS ──
 
@@ -114,8 +113,7 @@ class _FlakyClient:
         self.closed = True
         self.is_connected = False
 
-    async def send_message(self, message, session_key="agent:main:main",
-                           on_stream=None, idempotency_key=None):
+    async def send_message(self, message, session_key="agent:main:main", on_stream=None, idempotency_key=None):
         self.attempt_keys.append(idempotency_key)
         self.concurrent_now += 1
         self.max_concurrent = max(self.max_concurrent, self.concurrent_now)

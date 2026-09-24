@@ -9,7 +9,8 @@ Connects to Telegram Bot API using httpx to:
 
 import asyncio
 import os
-from typing import Awaitable, Callable, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 import structlog
@@ -34,10 +35,10 @@ class TelegramAdapter(BaseChatAdapter):
         self._api_url = f"{base_url.rstrip('/')}/bot{bot_token}"
         self._http_client = httpx.AsyncClient(timeout=35.0)
         self._running = False
-        self._listen_task: Optional[asyncio.Task] = None
+        self._listen_task: asyncio.Task | None = None
         self._last_update_id = 0
         self._bot_id = ""
-        self._on_message: Optional[Callable[[ChannelEvent], Awaitable[None]]] = None
+        self._on_message: Callable[[ChannelEvent], Awaitable[None]] | None = None
 
     @property
     def name(self) -> str:
@@ -97,7 +98,7 @@ class TelegramAdapter(BaseChatAdapter):
         """Continuously long-poll for updates from Telegram."""
         while self._running:
             try:
-                params = {
+                params: dict[str, Any] = {
                     "offset": self._last_update_id + 1,
                     "timeout": 20,
                     "allowed_updates": ["message", "channel_post"],
@@ -175,6 +176,7 @@ class TelegramAdapter(BaseChatAdapter):
         )
 
         if self._on_message:
+
             async def _dispatch():
                 try:
                     await self._on_message(event)
@@ -185,7 +187,7 @@ class TelegramAdapter(BaseChatAdapter):
 
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send message to a chat or topic."""
-        body = {
+        body: dict[str, Any] = {
             "chat_id": channel_id,
             "text": message,
         }
@@ -224,7 +226,7 @@ class TelegramAdapter(BaseChatAdapter):
 
     async def send_typing(self, channel_id: str, parent_id: str = "") -> None:
         """Send chat action typing indicator."""
-        body = {
+        body: dict[str, Any] = {
             "chat_id": channel_id,
             "action": "typing",
         }
@@ -240,7 +242,7 @@ class TelegramAdapter(BaseChatAdapter):
         self,
         channel_id: str,
         message: str,
-        file_ids_or_paths: List[str],
+        file_ids_or_paths: list[str],
         root_id: str = "",
     ) -> str:
         """Send document files with caption to Telegram chat."""
@@ -251,7 +253,7 @@ class TelegramAdapter(BaseChatAdapter):
                 with open(item, "rb") as fh:
                     content = fh.read()
                 files = {"document": (filename, content)}
-                data = {"chat_id": channel_id, "caption": message}
+                data: dict[str, Any] = {"chat_id": channel_id, "caption": message}
                 if root_id and root_id.isdigit():
                     data["message_thread_id"] = int(root_id)
                 resp = await self._http_client.post(
@@ -266,7 +268,7 @@ class TelegramAdapter(BaseChatAdapter):
                 message = ""
             else:
                 # If file_id, send via existing sendDocument file_id
-                body = {
+                body: dict[str, Any] = {
                     "chat_id": channel_id,
                     "document": item,
                     "caption": message,

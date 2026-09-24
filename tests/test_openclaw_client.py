@@ -1,6 +1,6 @@
 import asyncio
 
-from src.services.openclaw_client import OpenClawClient, DeviceCredentials
+from src.services.openclaw_client import DeviceCredentials, OpenClawClient
 
 
 def test_dispatch_sets_result_tuple_for_chat_send_rejection():

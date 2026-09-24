@@ -7,7 +7,8 @@ Communicates with Bitrix24 REST API for corporate chat bots:
 - Emits typing indicators via imbot.chat.startWriting
 """
 
-from typing import Awaitable, Callable, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 import structlog
@@ -32,7 +33,7 @@ class BitrixAdapter(BaseChatAdapter):
         self._bot_id = bot_id
         self._http_client = httpx.AsyncClient(timeout=15.0)
         self._running = False
-        self._on_message: Optional[Callable[[ChannelEvent], Awaitable[None]]] = None
+        self._on_message: Callable[[ChannelEvent], Awaitable[None]] | None = None
 
     @property
     def name(self) -> str:
@@ -54,7 +55,7 @@ class BitrixAdapter(BaseChatAdapter):
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """Send message via Bitrix24 imbot.message.add."""
         url = f"{self._webhook_url}/imbot.message.add.json"
-        payload = {
+        payload: dict[str, Any] = {
             "DIALOG_ID": channel_id,
             "MESSAGE": message,
         }
@@ -77,7 +78,7 @@ class BitrixAdapter(BaseChatAdapter):
             return
 
         url = f"{self._webhook_url}/imbot.message.update.json"
-        payload = {
+        payload: dict[str, Any] = {
             "MESSAGE_ID": int(post_id) if post_id.isdigit() else post_id,
             "MESSAGE": message,
         }
@@ -93,7 +94,7 @@ class BitrixAdapter(BaseChatAdapter):
     async def send_typing(self, channel_id: str, parent_id: str = "") -> None:
         """Start typing indicator in Bitrix24 chat."""
         url = f"{self._webhook_url}/imbot.chat.startWriting.json"
-        payload = {"DIALOG_ID": channel_id}
+        payload: dict[str, Any] = {"DIALOG_ID": channel_id}
         if self._bot_id:
             payload["BOT_ID"] = self._bot_id
 
@@ -106,7 +107,7 @@ class BitrixAdapter(BaseChatAdapter):
         self,
         channel_id: str,
         message: str,
-        file_ids_or_paths: List[str],
+        file_ids_or_paths: list[str],
         root_id: str = "",
     ) -> str:
         """Send message (file links included in text for Bitrix)."""

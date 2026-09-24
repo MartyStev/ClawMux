@@ -13,14 +13,14 @@ Key changes vs v1:
 import asyncio
 import time
 import uuid
-from typing import Awaitable, Callable, Dict, Optional
+from collections.abc import Awaitable, Callable
 
 import structlog
 
 from src.core.config import settings
-from src.services.mapping import DeviceCredentials, InstanceInfo
-from src.utils.metrics import ws_active_connections, ws_errors_total
+from src.services.mapping import InstanceInfo
 from src.services.openclaw_client import OpenClawClient, OpenClawConnectionError
+from src.utils.metrics import ws_active_connections, ws_errors_total
 
 logger = structlog.get_logger(__name__)
 
@@ -36,7 +36,7 @@ class WSConnectionManager:
 
     def __init__(
         self,
-        on_proactive: Optional[Callable[[str, str], Awaitable[None]]] = None,
+        on_proactive: Callable[[str, str], Awaitable[None]] | None = None,
     ):
         """
         Args:
@@ -44,16 +44,16 @@ class WSConnectionManager:
                           Signature: async def on_proactive(user_id: str, text: str)
         """
         self._on_proactive = on_proactive
-        self._clients: Dict[str, OpenClawClient] = {}
-        self._locks: Dict[str, asyncio.Lock] = {}
+        self._clients: dict[str, OpenClawClient] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
         # Serializes whole logical sends (send + reconnect-retry) per user,
         # so concurrent sends can't race into double reconnects or interleave.
-        self._send_locks: Dict[str, asyncio.Lock] = {}
-        self._user_info: Dict[str, InstanceInfo] = {}  # stored for reconnect
-        self._guardian_tasks: Dict[str, asyncio.Task] = {}
-        self._last_active: Dict[str, float] = {}  # user_id → last message timestamp
+        self._send_locks: dict[str, asyncio.Lock] = {}
+        self._user_info: dict[str, InstanceInfo] = {}  # stored for reconnect
+        self._guardian_tasks: dict[str, asyncio.Task] = {}
+        self._last_active: dict[str, float] = {}  # user_id → last message timestamp
         self._shutting_down = False
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         """Start the periodic idle-connection cleanup loop. Call once from the app lifespan."""
@@ -74,7 +74,7 @@ class WSConnectionManager:
             self._send_locks[user_id] = asyncio.Lock()
         return self._send_locks[user_id]
 
-    def get_cached_info(self, user_id: str) -> Optional[InstanceInfo]:
+    def get_cached_info(self, user_id: str) -> InstanceInfo | None:
         """Return cached InstanceInfo if we already have a connection for this user."""
         return self._user_info.get(user_id)
 
@@ -83,9 +83,11 @@ class WSConnectionManager:
 
     def _make_proactive_cb(self, user_id: str) -> Callable[[str], Awaitable[None]]:
         """Create a proactive callback bound to a specific user_id."""
+
         async def _cb(text: str) -> None:
             if self._on_proactive:
                 await self._on_proactive(user_id, text)
+
         return _cb
 
     async def get_or_create(self, user_id: str, info: InstanceInfo) -> OpenClawClient:
@@ -147,9 +149,7 @@ class WSConnectionManager:
 
         logger.error("connection_failed_all_retries", user_id=user_id, error=str(last_error))
         ws_errors_total.labels(error_type="connect_failed").inc()
-        raise OpenClawConnectionError(
-            f"Failed to connect after {max_retries} attempts: {last_error}"
-        )
+        raise OpenClawConnectionError(f"Failed to connect after {max_retries} attempts: {last_error}")
 
     def _start_guardian(self, user_id: str) -> None:
         """Start (or restart) the guardian task for a user."""
@@ -179,7 +179,7 @@ class WSConnectionManager:
                 try:
                     # Block until listen_loop exits (= disconnected)
                     await asyncio.wait_for(asyncio.shield(listen_task), timeout=60)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Still alive — loop back and wait more
                     continue
                 except asyncio.CancelledError:
@@ -226,7 +226,7 @@ class WSConnectionManager:
         info: InstanceInfo,
         message: str,
         session_key: str = "agent:main:main",
-        on_stream: Optional[Callable[[str], Awaitable[None]]] = None,
+        on_stream: Callable[[str], Awaitable[None]] | None = None,
     ) -> tuple[str, list[str]]:
         """
         Send a message to user's OpenClaw instance and get the response.
@@ -306,12 +306,15 @@ class WSConnectionManager:
 
             now = time.time()
             idle_users = [
-                uid for uid, last in list(self._last_active.items())
+                uid
+                for uid, last in list(self._last_active.items())
                 if (now - last) > idle_timeout and uid in self._clients
             ]
 
             for user_id in idle_users:
-                logger.info("closing_idle_connection", user_id=user_id, idle_sec=round(now - self._last_active[user_id]))
+                logger.info(
+                    "closing_idle_connection", user_id=user_id, idle_sec=round(now - self._last_active[user_id])
+                )
                 self._last_active.pop(user_id, None)
                 await self.close_connection(user_id)
 

@@ -21,25 +21,25 @@ Protocol flow:
   5. send_message() drops a chat.send and waits for the aggregated chat.final
 """
 
-import aiofiles
 import asyncio
 import base64
 import json
-import re
 import os
+import re
 import time
 import uuid
-from typing import Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
 
+import aiofiles
 import structlog
 import websockets
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from websockets.asyncio.client import ClientConnection
 
-from src.utils.claw_aggregator import ClawAggregator, ClawMessage
-from src.utils.tasks import fire_and_forget
 from src.core.config import settings
 from src.services.mapping import DeviceCredentials
+from src.utils.claw_aggregator import ClawAggregator, ClawMessage
+from src.utils.tasks import fire_and_forget
 
 logger = structlog.get_logger(__name__)
 
@@ -76,10 +76,19 @@ def _sign_connect(nonce: str, credentials: DeviceCredentials, gateway_token: str
     priv_bytes = _b64url_decode(credentials.private_key_b64)
     private_key = Ed25519PrivateKey.from_private_bytes(priv_bytes)
     signed_at_ms = int(time.time() * 1000)
-    sign_payload = "|".join([
-        "v2", credentials.device_id, CLIENT_ID, CLIENT_MODE,
-        ROLE, SCOPES_CSV, str(signed_at_ms), gateway_token, nonce,
-    ])
+    sign_payload = "|".join(
+        [
+            "v2",
+            credentials.device_id,
+            CLIENT_ID,
+            CLIENT_MODE,
+            ROLE,
+            SCOPES_CSV,
+            str(signed_at_ms),
+            gateway_token,
+            nonce,
+        ]
+    )
     sig_bytes = private_key.sign(sign_payload.encode())
     return {
         "device": {
@@ -119,25 +128,25 @@ class OpenClawClient:
         self,
         instance_url: str,
         credentials: DeviceCredentials,
-        on_proactive: Optional[Callable[[str], Awaitable[None]]] = None,
+        on_proactive: Callable[[str], Awaitable[None]] | None = None,
     ):
         self.instance_url = instance_url
         self.credentials = credentials
         self.gateway_token = credentials.gateway_token
         self._on_proactive = on_proactive
 
-        self._ws: Optional[ClientConnection] = None
+        self._ws: ClientConnection | None = None
         self._connected = False
-        self._listen_task: Optional[asyncio.Task] = None
+        self._listen_task: asyncio.Task | None = None
 
         # One message in-flight at a time.
         self._send_lock = asyncio.Lock()
-        self._active_msg_id: Optional[str] = None
+        self._active_msg_id: str | None = None
         # Future resolves to (text, media_paths) tuple
-        self._pending_future: Optional[asyncio.Future[tuple[str, list[str]]]] = None
-        self._pending_future_msg_id: Optional[str] = None
-        self._timed_out_msg_id: Optional[str] = None
-        self._active_on_stream: Optional[Callable[[str], Awaitable[None]]] = None
+        self._pending_future: asyncio.Future[tuple[str, list[str]]] | None = None
+        self._pending_future_msg_id: str | None = None
+        self._timed_out_msg_id: str | None = None
+        self._active_on_stream: Callable[[str], Awaitable[None]] | None = None
 
         # Workaround for OpenClaw Gateway normalizer bug (strips zeroes like "13 480 000" -> "13 480 0")
         # We buffer the raw uncorrupted text from the 'agent' stream here.
@@ -190,8 +199,7 @@ class OpenClawClient:
                 missing.append("gateway_token")
             if missing:
                 raise OpenClawConnectionError(
-                    "Instance credentials are incomplete in DB "
-                    f"(missing: {', '.join(missing)})."
+                    f"Instance credentials are incomplete in DB (missing: {', '.join(missing)})."
                 )
 
             self._log.info("connecting")
@@ -209,9 +217,7 @@ class OpenClawClient:
             raw = await asyncio.wait_for(self._ws.recv(), timeout=10)
             data = json.loads(raw)
             if data.get("event") != "connect.challenge":
-                raise OpenClawConnectionError(
-                    f"Expected connect.challenge, got: {data.get('event')}"
-                )
+                raise OpenClawConnectionError(f"Expected connect.challenge, got: {data.get('event')}")
             nonce = data["payload"]["nonce"]
 
             # Step 2: signed connect
@@ -261,8 +267,8 @@ class OpenClawClient:
         self,
         message: str,
         session_key: str = "agent:main:main",
-        on_stream: Optional[Callable[[str], Awaitable[None]]] = None,
-        idempotency_key: Optional[str] = None,
+        on_stream: Callable[[str], Awaitable[None]] | None = None,
+        idempotency_key: str | None = None,
     ) -> tuple[str, list[str]]:
         """
         Send a chat message. Returns a tuple of (response_text, media_paths).
@@ -274,6 +280,10 @@ class OpenClawClient:
         disconnect so OpenClaw deduplicates instead of processing twice.
         """
         if not self.is_connected:
+            raise OpenClawConnectionError("Not connected. Call connect() first.")
+
+        ws = self._ws
+        if ws is None:
             raise OpenClawConnectionError("Not connected. Call connect() first.")
 
         async with self._send_lock:
@@ -288,17 +298,21 @@ class OpenClawClient:
             self._log.info("sending_message", msg_id=msg_id, text_len=len(message))
 
             try:
-                await self._ws.send(json.dumps({
-                    "type": "req",
-                    "id": msg_id,
-                    "method": "chat.send",
-                    "params": {
-                        "sessionKey": session_key,
-                        "message": message,
-                        "deliver": True,
-                        "idempotencyKey": idempotency_key,
-                    },
-                }))
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "req",
+                            "id": msg_id,
+                            "method": "chat.send",
+                            "params": {
+                                "sessionKey": session_key,
+                                "message": message,
+                                "deliver": True,
+                                "idempotencyKey": idempotency_key,
+                            },
+                        }
+                    )
+                )
 
                 # asyncio.shield so that TimeoutError cancellation
                 # doesn't cancel the Future itself (listen_loop still owns it).
@@ -315,7 +329,7 @@ class OpenClawClient:
                 )
                 return text, media_paths
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log.warning("send_timeout", msg_id=msg_id)
                 # Do NOT clear _pending_future here — leave it with the timed-out msg_id
                 # so that _route_completed_message can detect this as a stale response
@@ -349,8 +363,12 @@ class OpenClawClient:
         """
         dump_file = "/tmp/ws_raw_dump.jsonl" if os.getenv("RAW_WS_DUMP") == "1" else None
         self._log.info("listen_loop_started", raw_dump=dump_file or "disabled")
+        ws = self._ws
+        if ws is None:
+            self._connected = False
+            return
         try:
-            async for raw in self._ws:
+            async for raw in ws:
                 try:
                     # Write full untruncated message to dump file if enabled
                     if dump_file:
@@ -379,9 +397,7 @@ class OpenClawClient:
             # Unblock any waiting send_message with an exception so
             # ws_manager catches it and triggers reconnect + retry.
             if self._pending_future is not None and not self._pending_future.done():
-                self._pending_future.set_exception(
-                    OpenClawConnectionError("WebSocket disconnected mid-request")
-                )
+                self._pending_future.set_exception(OpenClawConnectionError("WebSocket disconnected mid-request"))
 
     async def _dispatch(self, parsed: dict) -> None:
         """Route a single WS message to the right handler."""
@@ -392,7 +408,7 @@ class OpenClawClient:
         payload = parsed.get("payload", {})
         session_key = payload.get("sessionKey", "") if isinstance(payload, dict) else ""
         run_id = payload.get("runId", "") if isinstance(payload, dict) else ""
-        
+
         # We MUST ignore events from subagent-owned sessions.
         # Subagents run in the background and are summarized by the main agent.
         # We only filter by sessionKey (where the event comes FROM), NOT by runId.
@@ -401,7 +417,6 @@ class OpenClawClient:
         if session_key and ":subagent:" in session_key:
             self._log.debug("ignored_subagent_event", ws_event=event, session_key=session_key, run_id=run_id)
             return
-
 
         state = payload.get("state", "") if isinstance(payload, dict) else ""
         self._log.debug(
@@ -441,7 +456,7 @@ class OpenClawClient:
                 run_id = payload_dict.get("runId", "")
                 if text and run_id:
                     self._agent_texts[run_id] = text
-                    # Trigger streaming directly from the pure agent stream 
+                    # Trigger streaming directly from the pure agent stream
                     # since chat stream is often missing for the final answer run.
                     if self._active_on_stream and self._active_msg_id:
                         self._fire_and_log(self._active_on_stream(text), task_name="on_stream_agent")
@@ -454,14 +469,14 @@ class OpenClawClient:
                     error_msg = payload_dict.get("data", {}).get("error", "Unknown LLM error")
                     if self._pending_future and not self._pending_future.done():
                         self._log.error("agent_lifecycle_error", error=error_msg, msg_id=self._active_msg_id)
-                        
+
                         # Preserve any text that was already generated before the crash
                         existing_text = self._agent_texts.get(run_id, "")
                         if existing_text:
                             final_text = f"{existing_text}\n\n⚠️ **Generation failure:** {error_msg}"
                         else:
                             final_text = f"[LLM error: {error_msg}]"
-                            
+
                         self._pending_future.set_result((final_text, []))
 
                 # GATEWAY BUG FALLBACK:
@@ -494,7 +509,7 @@ class OpenClawClient:
                                     msg_id=_captured_msg_id,
                                     text_len=len(_captured_text),
                                 )
-        # lifecycle:end fallback: resolve Future DIRECTLY with empty media_paths
+                                # lifecycle:end fallback: resolve Future DIRECTLY with empty media_paths
                                 self._pending_future.set_result((_captured_text, []))
 
                         fire_and_forget(
@@ -502,7 +517,6 @@ class OpenClawClient:
                             name=f"lifecycle-fallback-{run_id[:8]}",
                         )
             return
-
 
         # chat.final / chat.partial → feed into aggregator
         if event == "chat":
@@ -516,7 +530,7 @@ class OpenClawClient:
             # The Gateway's normalized chat stream has a bug where it strips zeroes.
             # Additionally, it injects internal reasoning steps which artificially inflates length.
             # We override the corrupted text with the raw, clean text if available.
-            agent_text = self._agent_texts.get(run_id)
+            agent_text = self._agent_texts.get(run_id, "")
             if agent_text:
                 text = agent_text
 
@@ -539,7 +553,7 @@ class OpenClawClient:
                 if isinstance(single_url, str) and single_url.strip():
                     if single_url.strip() not in media_paths:
                         media_paths.append(single_url.strip())
-                
+
                 # 2. Extract paths directly from the text (markdown links or raw paths)
                 # Matches: [Link](/home/node/.openclaw/...) or just /home/node/.openclaw/...
                 openclaw_prefix = "/home/node/.openclaw/"
@@ -548,14 +562,14 @@ class OpenClawClient:
                     extracted_path = match.group(1).strip()
                     if extracted_path not in media_paths:
                         media_paths.append(extracted_path)
-                
+
                 # Remove internal links and paths from the text so they don't show up in chat
                 markdown_pattern = re.compile(rf"\[[^\]]*\]\({openclaw_prefix}[^\)]+\)")
                 text = markdown_pattern.sub("", text)
-                
+
                 raw_pattern = re.compile(rf"{openclaw_prefix}[^\s\"\'\)]+")
                 text = raw_pattern.sub("", text)
-                
+
                 text = text.strip()
 
                 if media_paths:
@@ -621,7 +635,8 @@ class OpenClawClient:
                 delivery_status=delivery_status,
             )
             # Deliver to user if there is a human-readable summary
-            self._fire_and_log(self._on_proactive(summary), task_name="cron_proactive")
+            if self._on_proactive:
+                self._fire_and_log(self._on_proactive(summary), task_name="cron_proactive")
             return
 
         # Legacy session.updated (kept for compatibility)
@@ -688,7 +703,7 @@ class OpenClawClient:
                         text_parts.append(text)
             if text_parts:
                 return "\n\n".join(text_parts)
-        
+
         # Fallback: payload.text directly
         flat_text = payload.get("text", "") if isinstance(payload, dict) else ""
         if flat_text:

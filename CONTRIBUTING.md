@@ -16,8 +16,21 @@ cd ClawMux
 cp .env.example .env
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.lock
+pip install -r requirements-dev.txt
 ```
+
+## Quality gates
+
+CI enforces the following — run them locally before pushing:
+
+```bash
+python -m ruff check src tests scripts   # lint
+python -m ruff format --check src tests scripts
+python -m mypy                           # type check (src only; tests are exempt)
+python -m pytest -q --cov                # tests + coverage gate (fail_under in pyproject.toml)
+```
+
+Tooling config lives in `pyproject.toml` (ruff rules, mypy, pytest, coverage).
 
 ## Testing
 
@@ -29,6 +42,6 @@ python -m pytest -q
 
 ## Code style
 
-- Keep code readable and maintain consistency with the existing style.
+- Formatting and imports are enforced by `ruff format` / `ruff check` (line length 120, rule sets E4/E7/E9/F/I/UP/B).
 - Prefer descriptive variable names and small functions.
 - Add or update tests for new behavior.

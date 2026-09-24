@@ -16,9 +16,7 @@ Route B (OpenClaw → Mattermost):
 import asyncio
 import os
 import re
-import time
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import aiofiles
 import httpx
@@ -36,19 +34,22 @@ _UUID_RE = re.compile(
 
 # ── Data classes ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class DownloadedFile:
     """A file downloaded from Mattermost and saved to the shared volume."""
-    filename: str           # "report.pdf"
-    host_path: str          # "/configs/<UUID>/workspace/downloads/report.pdf"
-    container_path: str     # "/home/node/.openclaw/workspace/downloads/report.pdf"
+
+    filename: str  # "report.pdf"
+    host_path: str  # "/configs/<UUID>/workspace/downloads/report.pdf"
+    container_path: str  # "/home/node/.openclaw/workspace/downloads/report.pdf"
     size_bytes: int
-    mime_type: str          # "application/pdf"
+    mime_type: str  # "application/pdf"
 
 
 # ── Helper functions ───────────────────────────────────────────────────────────
 
-def extract_uuid_from_instance_url(instance_url: str) -> Optional[str]:
+
+def extract_uuid_from_instance_url(instance_url: str) -> str | None:
     """Extract UUID from an OpenClaw instance URL (e.g. http://host/<uuid>/...)."""
     m = _UUID_RE.search(instance_url)
     return m.group(0) if m else None
@@ -62,7 +63,7 @@ def container_path_to_host(container_path: str, uuid: str) -> str:
     Example:
       /home/node/.openclaw/workspace/output/report.xlsx
       → /configs/<UUID>/workspace/output/report.xlsx
-      
+
       /home/node/.openclaw/canvas/documents/kazan_may_2025/index.html
       → /configs/<UUID>/canvas/documents/kazan_may_2025/index.html
     """
@@ -74,7 +75,7 @@ def container_path_to_host(container_path: str, uuid: str) -> str:
             openclaw_root=openclaw_root,
         )
         return ""
-    relative = container_path[len(openclaw_root):]  # e.g. workspace/output/report.xlsx
+    relative = container_path[len(openclaw_root) :]  # e.g. workspace/output/report.xlsx
     return f"{settings.workspace_base_path}/{uuid}/{relative}"
 
 
@@ -85,15 +86,10 @@ def build_attachment_context(files: list[DownloadedFile]) -> str:
     """
     if not files:
         return ""
-    lines = [
-        f"- `{f.filename}` ({f.mime_type}, {f.size_bytes // 1024} KB)"
-        f" → `{f.container_path}`"
-        for f in files
-    ]
+    lines = [f"- `{f.filename}` ({f.mime_type}, {f.size_bytes // 1024} KB) → `{f.container_path}`" for f in files]
     return (
         "\n\n[SYSTEM: the user attached one or more files. "
-        "They are available to read at the following paths:]\n"
-        + "\n".join(lines)
+        "They are available to read at the following paths:]\n" + "\n".join(lines)
     )
 
 
@@ -115,6 +111,7 @@ def sanitize_filename(name: str, fallback: str) -> str:
 
 
 # ── FileManager ────────────────────────────────────────────────────────────────
+
 
 class FileManager:
     """
@@ -165,7 +162,7 @@ class FileManager:
         file_id: str,
         host_dir: str,
         max_bytes: int,
-    ) -> Optional[DownloadedFile]:
+    ) -> DownloadedFile | None:
         """Download a single file by Mattermost file_id."""
         # Fetch file metadata first to check size and get filename
         resp = await self._http_client.get(f"/files/{file_id}/info")
@@ -190,6 +187,7 @@ class FileManager:
         if await asyncio.to_thread(os.path.exists, host_path):
             base, ext = os.path.splitext(filename)
             import uuid as _uuid
+
             filename = f"{base}_{_uuid.uuid4().hex[:6]}{ext}"
             host_path = os.path.join(host_dir, filename)
 
@@ -206,9 +204,7 @@ class FileManager:
         except OSError as e:
             self._log.warning("chmod_failed", error=str(e))
 
-        container_path = (
-            f"{settings.container_workspace_root}/downloads/{filename}"
-        )
+        container_path = f"{settings.container_workspace_root}/downloads/{filename}"
 
         self._log.info(
             "attachment_downloaded",
@@ -232,7 +228,7 @@ class FileManager:
         self,
         host_path: str,
         channel_id: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Upload a file from the shared volume to Mattermost.
         Returns the Mattermost file_id on success, None on failure.
@@ -256,11 +252,9 @@ class FileManager:
         try:
             async with aiofiles.open(host_path, "rb") as fh:
                 content = await fh.read()
-            
+
             resp = await self._http_client.post(
-                "/files",
-                data={"channel_id": channel_id},
-                files={"files": (filename, content)}
+                "/files", data={"channel_id": channel_id}, files={"files": (filename, content)}
             )
             resp.raise_for_status()
             result = resp.json()

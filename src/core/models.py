@@ -15,7 +15,6 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
-    Column,
     DateTime,
     ForeignKey,
     Integer,
@@ -24,14 +23,13 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from src.core.crypto import EncryptedText
 
 
 class Base(DeclarativeBase):
     """SQLAlchemy declarative base."""
-    __allow_unmapped__ = True  # legacy Column() style — no Mapped[] wrappers
 
 
 class Instance(Base):
@@ -44,41 +42,47 @@ class Instance(Base):
 
     __tablename__ = "instance"
 
-    instance_uuid: str = Column(
-        String(36), primary_key=True,
+    instance_uuid: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
         comment="Container/directory UUID (openclaw-gw-<UUID>)",
     )
-    instance_url: str = Column(
-        Text, nullable=False,
+    instance_url: Mapped[str] = mapped_column(
+        Text,
         comment="OpenClaw WS URL: ws://openclaw-gw-<UUID>:18789/ws",
     )
 
     # ── Device identity ───────────────────────────────────────────────────────
-    device_id: str = Column(
-        String(64), nullable=False, comment="SHA-256 hex of Ed25519 public key",
+    device_id: Mapped[str] = mapped_column(
+        String(64),
+        comment="SHA-256 hex of Ed25519 public key",
     )
-    public_key_b64: str = Column(
-        Text, nullable=False, comment="Ed25519 public key, base64url no padding",
+    public_key_b64: Mapped[str] = mapped_column(
+        Text,
+        comment="Ed25519 public key, base64url no padding",
     )
-    private_key_b64: str = Column(
-        EncryptedText, nullable=False,
+    private_key_b64: Mapped[str] = mapped_column(
+        EncryptedText,
         comment="Ed25519 private key, base64url no padding (encrypted at rest)",
     )
-    device_token: str = Column(
-        EncryptedText, nullable=False,
+    device_token: Mapped[str] = mapped_column(
+        EncryptedText,
         comment="Operator token from paired.json (encrypted at rest)",
     )
-    gateway_token: str = Column(
-        EncryptedText, nullable=False,
+    gateway_token: Mapped[str] = mapped_column(
+        EncryptedText,
         comment="OPENCLAW_GATEWAY_TOKEN for this instance (encrypted at rest)",
     )
-    created_at: datetime = Column(
-        DateTime(timezone=True), server_default=func.now(),
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
     # ── Relations ─────────────────────────────────────────────────────────────
-    assignment: Optional["UserInstance"] = relationship(
-        "UserInstance", back_populates="instance", uselist=False,
+    assignment: Mapped[Optional["UserInstance"]] = relationship(
+        "UserInstance",
+        back_populates="instance",
+        uselist=False,
     )
 
 
@@ -92,29 +96,38 @@ class AppUser(Base):
 
     __tablename__ = "app_user"
 
-    id: str = Column(
-        String(64), primary_key=True, comment="Internal router user identifier",
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        comment="Internal router user identifier",
     )
-    external_user_id: Optional[str] = Column(
-        String(128), nullable=True, unique=True, index=True,
+    external_user_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        unique=True,
+        index=True,
         comment="External user identifier used by Control-Plane API",
     )
-    role: Optional[str] = Column(
-        String(64), nullable=True,
+    role: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
         comment="Agent config role, e.g. 'curator', 'admin'",
     )
-    created_at: datetime = Column(
-        DateTime(timezone=True), server_default=func.now(),
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
     # ── Relations ─────────────────────────────────────────────────────────────
-    identities: list["UserIdentity"] = relationship(
+    identities: Mapped[list["UserIdentity"]] = relationship(
         "UserIdentity",
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    assignment: Optional["UserInstance"] = relationship(
-        "UserInstance", back_populates="user", uselist=False,
+    assignment: Mapped[Optional["UserInstance"]] = relationship(
+        "UserInstance",
+        back_populates="user",
+        uselist=False,
     )
 
 
@@ -134,22 +147,26 @@ class UserIdentity(Base):
         {"comment": "Provider identities for router users"},
     )
 
-    user_id: str = Column(
-        String(64), ForeignKey("app_user.id", ondelete="CASCADE"),
-        nullable=False,
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
     )
-    provider: str = Column(
-        String(32), primary_key=True,
+    provider: Mapped[str] = mapped_column(
+        String(32),
+        primary_key=True,
         comment="Identity provider, e.g. mattermost/slack",
     )
-    provider_user_id: str = Column(
-        String(128), primary_key=True, comment="User identifier inside provider",
+    provider_user_id: Mapped[str] = mapped_column(
+        String(128),
+        primary_key=True,
+        comment="User identifier inside provider",
     )
-    created_at: datetime = Column(
-        DateTime(timezone=True), server_default=func.now(),
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
-    user: AppUser = relationship("AppUser", back_populates="identities")
+    user: Mapped["AppUser"] = relationship("AppUser", back_populates="identities")
 
 
 class UserInstance(Base):
@@ -165,21 +182,24 @@ class UserInstance(Base):
 
     __tablename__ = "user_instance"
 
-    instance_uuid: str = Column(
-        String(36), ForeignKey("instance.instance_uuid", ondelete="CASCADE"),
+    instance_uuid: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("instance.instance_uuid", ondelete="CASCADE"),
         primary_key=True,
     )
-    user_id: str = Column(
-        String(64), ForeignKey("app_user.id", ondelete="CASCADE"),
-        nullable=False, unique=True,
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
+        unique=True,
     )
-    assigned_at: datetime = Column(
-        DateTime(timezone=True), server_default=func.now(),
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
     # ── Relations ─────────────────────────────────────────────────────────────
-    instance: Instance = relationship("Instance", back_populates="assignment")
-    user: AppUser = relationship("AppUser", back_populates="assignment")
+    instance: Mapped["Instance"] = relationship("Instance", back_populates="assignment")
+    user: Mapped["AppUser"] = relationship("AppUser", back_populates="assignment")
 
 
 class UserChannel(Base):
@@ -191,11 +211,13 @@ class UserChannel(Base):
 
     __tablename__ = "user_channel"
 
-    provider: str = Column(String(32), primary_key=True)
-    provider_user_id: str = Column(String(128), primary_key=True)
-    channel_id: str = Column(String(128), nullable=False)
-    updated_at: datetime = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider_user_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    channel_id: Mapped[str] = mapped_column(String(128))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
 
@@ -210,8 +232,9 @@ class MappingState(Base):
 
     __tablename__ = "mapping_state"
 
-    id: int = Column(Integer, primary_key=True)
-    version: int = Column(BigInteger, nullable=False, server_default="1")
-    updated_at: datetime = Column(
-        DateTime(timezone=True), server_default=func.now(),
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    version: Mapped[int] = mapped_column(BigInteger, server_default="1")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )

@@ -15,10 +15,10 @@ replica — cache invalidation no longer depends on the writing process.
 """
 
 import time
-import structlog
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any
 
+import structlog
 from sqlalchemy import insert, select, update
 from sqlalchemy.dialects import postgresql, sqlite
 
@@ -108,15 +108,16 @@ class MappingStorage:
 
         mode: 'bump' — version = version + 1; 'noop' — create only if absent.
         """
-        table = MappingState.__table__
+        table: Any = MappingState.__table__
         dialect = session.get_bind().dialect.name
-        insert_cls = {
-            "postgresql": postgresql.insert,
-            "sqlite": sqlite.insert,
-        }.get(dialect)
-        if insert_cls is None:
+        stmt: Any
+        if dialect == "postgresql":
+            stmt = postgresql.insert(table)
+        elif dialect == "sqlite":
+            stmt = sqlite.insert(table)
+        else:
             raise RuntimeError(f"Unsupported dialect for mapping_state upsert: {dialect}")
-        stmt = insert_cls(table).values(id=1, version=1)
+        stmt = stmt.values(id=1, version=1)
         if mode == "bump":
             stmt = stmt.on_conflict_do_update(
                 index_elements=["id"],
@@ -128,17 +129,13 @@ class MappingStorage:
 
     async def _cache_version(self, session) -> int:
         """Current global mapping-cache version (creates the singleton row lazily)."""
-        version = await session.scalar(
-            select(MappingState.version).where(MappingState.id == 1)
-        )
+        version = await session.scalar(select(MappingState.version).where(MappingState.id == 1))
         if version is None:
             await session.execute(self._state_upsert(session, mode="noop"))
-            version = await session.scalar(
-                select(MappingState.version).where(MappingState.id == 1)
-            )
+            version = await session.scalar(select(MappingState.version).where(MappingState.id == 1))
         return int(version)
 
-    def _cache_get(self, cache: dict, key: tuple, version: int) -> Optional[object]:
+    def _cache_get(self, cache: dict, key: tuple, version: int) -> object | None:
         entry = cache.get(key)
         if entry is None:
             return None
@@ -343,7 +340,7 @@ class MappingStorage:
         self,
         provider: str,
         provider_user_id: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Last known channel for a provider identity, or None."""
         provider = self._validate_provider(provider)
         async with async_session_factory() as session:
@@ -362,8 +359,8 @@ class MappingStorage:
         instance_uuid: str,
         instance_url: str,
         credentials: DeviceCredentials,
-        external_user_id: Optional[str] = None,
-        role: Optional[str] = "user",
+        external_user_id: str | None = None,
+        role: str | None = "user",
     ) -> InstanceInfo:
         """
         Create or update AppUser, UserIdentity, Instance, and UserInstance in 3NF DB schema.

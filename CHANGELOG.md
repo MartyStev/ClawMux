@@ -4,6 +4,17 @@ All notable changes to ClawMux will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **CI quality gate**: `pyproject.toml` now configures ruff (lint + format,
+  rule sets E4/E7/E9/F/I/UP/B), mypy (`src` only, tests exempt), and a
+  pytest coverage floor (`fail_under = 48`, currently ~51%). The GitHub
+  Actions workflow runs ruff, mypy, coverage-gated tests and a Docker image
+  build; `requirements-dev.txt` pins the tooling versions. SQLAlchemy models
+  were migrated to `Mapped[]`/`mapped_column` and assorted type/latent bugs
+  fixed (Telegram/VK-Teams payload typing, Bitrix `Any` import, uncalled
+  `None` proactive handler in cron events, dialect-specific upsert typing) to
+  get the type checker to zero errors.
+
 ### Fixed
 - **Send idempotency**: a WS disconnect mid-request used to retry `chat.send`
   with a fresh `idempotencyKey`, so OpenClaw could process the same message

@@ -10,7 +10,7 @@ so that the same Dify conversation_id is reused across multiple messages.
 
 import asyncio
 import json
-from typing import Optional, AsyncIterator, Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 import httpx
 import structlog
@@ -53,8 +53,8 @@ class DifyClient:
         self,
         user_id: str,
         message: str,
-        inputs: Optional[dict] = None,
-        on_stream: Optional[Callable[[str], Awaitable[None]]] = None,
+        inputs: dict | None = None,
+        on_stream: Callable[[str], Awaitable[None]] | None = None,
     ) -> str:
         """
         Send a message to Dify and return the complete answer.
@@ -92,7 +92,7 @@ class DifyClient:
                 self._stream_chat(payload, log, on_stream=on_stream),
                 timeout=self._timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.error("dify_timeout", timeout_sec=self._timeout)
             return ""
         except httpx.HTTPError as exc:
@@ -106,7 +106,7 @@ class DifyClient:
 
         return answer
 
-    def get_conversation_id(self, user_id: str) -> Optional[str]:
+    def get_conversation_id(self, user_id: str) -> str | None:
         """Return the cached Dify conversation_id for the user, if any."""
         return _conversation_cache.get(user_id)
 
@@ -122,7 +122,7 @@ class DifyClient:
         self,
         payload: dict,
         log,
-        on_stream: Optional[Callable[[str], Awaitable[None]]] = None,
+        on_stream: Callable[[str], Awaitable[None]] | None = None,
     ) -> tuple[str, str]:
         """
         POST /chat-messages and consume the SSE stream.
@@ -135,9 +135,7 @@ class DifyClient:
         conversation_id = ""
 
         async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
-            async with client.stream(
-                "POST", url, headers=self._headers, json=payload
-            ) as response:
+            async with client.stream("POST", url, headers=self._headers, json=payload) as response:
                 if response.status_code != 200:
                     body = await response.aread()
                     log.error(
@@ -151,7 +149,7 @@ class DifyClient:
                     if not line.startswith("data:"):
                         continue
 
-                    raw = line[len("data:"):].strip()
+                    raw = line[len("data:") :].strip()
                     if not raw or raw == "[DONE]":
                         continue
 

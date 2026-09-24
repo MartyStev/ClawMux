@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import text
@@ -11,15 +11,15 @@ from src.services.ws_manager import WSConnectionManager
 health_router = APIRouter(tags=["health"])
 
 # Module-level references — set once at startup via init_health()
-_ws_manager: Optional[WSConnectionManager] = None
-_mattermost: Optional[Any] = None
-_providers: Optional[ProviderRegistry] = None
+_ws_manager: WSConnectionManager | None = None
+_mattermost: Any | None = None
+_providers: ProviderRegistry | None = None
 
 
 def init_health(
     ws_manager: WSConnectionManager,
-    mattermost: Optional[Any] = None,
-    providers: Optional[ProviderRegistry] = None,
+    mattermost: Any | None = None,
+    providers: ProviderRegistry | None = None,
 ) -> None:
     """Inject dependencies at application startup."""
     global _ws_manager, _mattermost, _providers
@@ -58,6 +58,7 @@ async def health_ready(response: Response):
     db_ok = False
     db_error = None
     try:
+
         async def _ping_db():
             async with async_session_factory() as session:
                 await session.execute(text("SELECT 1"))
@@ -67,7 +68,7 @@ async def health_ready(response: Response):
     except Exception as e:
         db_error = str(e)
 
-    channels: Dict[str, str] = {}
+    channels: dict[str, str] = {}
     channels_ok = True
 
     if _providers is not None and _providers.all():
@@ -89,7 +90,7 @@ async def health_ready(response: Response):
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "status": "ready" if is_ready else "degraded",
         "service": "clawmux",
         "database": "ok" if db_ok else f"down: {db_error}",

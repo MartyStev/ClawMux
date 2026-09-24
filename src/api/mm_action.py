@@ -46,28 +46,20 @@ async def proxy_mm_action(
 
     try:
         payload = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-    
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from e
+
     context = payload.get("context", {})
-    logger.info(
-        "proxy_mm_action", 
-        task_id=context.get("task_id"), 
-        action=context.get("action")
-    )
-    
+    logger.info("proxy_mm_action", task_id=context.get("task_id"), action=context.get("action"))
+
     # Forward to internal tools-server
     # It must be accessible within the same Docker network (ai-network)
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                settings.mm_action_proxy_url,
-                json=payload, 
-                timeout=10.0
-            )
+            resp = await client.post(settings.mm_action_proxy_url, json=payload, timeout=10.0)
             resp.raise_for_status()
             return resp.json()
-            
+
     except Exception as e:
         logger.error("proxy_mm_action_failed", error=str(e))
         # We must return a valid Mattermost update structure even on failure,

@@ -1,5 +1,6 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -7,13 +8,13 @@ from fastapi.testclient import TestClient
 from src.api.bitrix import router as bitrix_router
 from src.api.teams import router as teams_router
 from src.router import Router
-from src.services.chat_adapter import BaseChatAdapter, ChannelEvent, ProviderRegistry
 from src.services.bitrix import BitrixAdapter
+from src.services.chat_adapter import BaseChatAdapter, ChannelEvent, ProviderRegistry
 from src.services.mapping import DeviceCredentials, InstanceInfo
-from src.services.telegram import TelegramAdapter
 from src.services.slack import SlackAdapter
-from src.services.vk_teams import VkTeamsAdapter
 from src.services.teams import TeamsAdapter
+from src.services.telegram import TelegramAdapter
+from src.services.vk_teams import VkTeamsAdapter
 
 
 class DummyAdapter(BaseChatAdapter):
@@ -46,7 +47,9 @@ class DummyAdapter(BaseChatAdapter):
     async def send_typing(self, channel_id: str, parent_id: str = "") -> None:
         self.typing_calls.append((channel_id, parent_id))
 
-    async def send_post_with_files(self, channel_id: str, message: str, file_ids_or_paths: list[str], root_id: str = "") -> str:
+    async def send_post_with_files(
+        self, channel_id: str, message: str, file_ids_or_paths: list[str], root_id: str = ""
+    ) -> str:
         return "file-msg-123"
 
     async def get_or_create_dm_channel(self, user_id: str) -> str:
@@ -123,7 +126,7 @@ def test_bitrix_webhook_endpoint(monkeypatch):
     monkeypatch.setattr("src.api.bitrix.settings.bitrix_inbound_secret", "test-secret")
     app = FastAPI()
     app.include_router(bitrix_router)
-    
+
     router_mock = AsyncMock()
     app.state.router = router_mock
     client = TestClient(app)

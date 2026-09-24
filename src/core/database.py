@@ -4,6 +4,8 @@ ClawMux — Database engine & session factory.
 Uses SQLAlchemy 2.0 async with asyncpg driver.
 """
 
+from collections.abc import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -28,7 +30,7 @@ async_session_factory = async_sessionmaker(
 )
 
 
-async def get_session() -> AsyncSession:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Dependency — yield an async session."""
     async with async_session_factory() as session:
         yield session

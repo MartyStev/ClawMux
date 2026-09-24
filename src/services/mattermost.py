@@ -10,7 +10,7 @@ Uses mattermostdriver for HTTP API and raw websockets for the event stream.
 
 import asyncio
 import json
-from typing import Callable, Awaitable, Optional
+from collections.abc import Awaitable, Callable
 
 import httpx
 import structlog
@@ -67,7 +67,7 @@ class MattermostClient(BaseChatAdapter):
     def is_connected(self) -> bool:
         return self.is_ws_connected
 
-    def __init__(self):
+    def __init__(self) -> None:
         url = settings.mattermost_url.rstrip("/")
         self._http_client = httpx.AsyncClient(
             base_url=f"{url}/api/v4",
@@ -75,10 +75,10 @@ class MattermostClient(BaseChatAdapter):
             timeout=10.0,
         )
 
-        self._bot_user_id: Optional[str] = None
-        self._ws: Optional[websockets.ClientConnection] = None
+        self._bot_user_id: str | None = None
+        self._ws: websockets.ClientConnection | None = None
         self._running = False
-        self._on_message: Optional[Callable[[MattermostEvent], Awaitable[None]]] = None
+        self._on_message: Callable[[MattermostEvent], Awaitable[None]] | None = None
         self._ws_seq = 1
 
     async def start(
@@ -130,11 +130,13 @@ class MattermostClient(BaseChatAdapter):
 
             # Authenticate the WS connection
             self._ws_seq += 1
-            auth_msg = json.dumps({
-                "seq": self._ws_seq,
-                "action": "authentication_challenge",
-                "data": {"token": settings.mattermost_token},
-            })
+            auth_msg = json.dumps(
+                {
+                    "seq": self._ws_seq,
+                    "action": "authentication_challenge",
+                    "data": {"token": settings.mattermost_token},
+                }
+            )
             await ws.send(auth_msg)
             logger.info("mattermost_ws_authenticated")
 
@@ -206,11 +208,13 @@ class MattermostClient(BaseChatAdapter):
         # Dispatch to handler in a separate task so we don't block the WS read loop
         # Blocking this loop prevents websockets from replying to Ping frames.
         if self._on_message:
+
             async def _dispatch():
                 try:
                     await self._on_message(event)
                 except Exception as e:
                     logger.error("mattermost_on_message_error", error=str(e))
+
             fire_and_forget(_dispatch(), name="mm-on-message")
 
     async def send_typing(self, channel_id: str, parent_id: str = "") -> None:
@@ -225,18 +229,17 @@ class MattermostClient(BaseChatAdapter):
             if self._ws.protocol.state.name != "OPEN":
                 return
             self._ws_seq += 1
-            await self._ws.send(json.dumps({
-                "seq": self._ws_seq,
-                "action": "user_typing",
-                "data": {
-                    "channel_id": channel_id,
-                    "parent_id": parent_id
-                }
-            }))
+            await self._ws.send(
+                json.dumps(
+                    {
+                        "seq": self._ws_seq,
+                        "action": "user_typing",
+                        "data": {"channel_id": channel_id, "parent_id": parent_id},
+                    }
+                )
+            )
         except Exception as e:
             logger.warning("mattermost_typing_error", error=str(e))
-
-
 
     async def send_reply(self, channel_id: str, message: str, root_id: str = "") -> str:
         """
@@ -364,7 +367,7 @@ class MattermostClient(BaseChatAdapter):
                 await self._ws.close()
             except Exception:
                 pass
-        if hasattr(self, '_http_client'):
+        if hasattr(self, "_http_client"):
             await self._http_client.aclose()
         logger.info("mattermost_stopped")
 

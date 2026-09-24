@@ -29,8 +29,8 @@ Architecture:
 """
 
 import asyncio
-from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import structlog
 
@@ -41,11 +41,17 @@ logger = structlog.get_logger(__name__)
 # Short exact strings that are obviously placeholder-only responses.
 # Must be EXACT short tokens — do NOT put long prefixes here, or you'll
 # filter real answers like "Ok, here are the details..." or "I'll check now..."
-_JUNK_EXACT = frozenset({
-    "ok", "ok.",
-    "thinking", "thinking...",
-    "...", "…",
-})
+_JUNK_EXACT = frozenset(
+    {
+        "ok",
+        "ok.",
+        "thinking",
+        "thinking...",
+        "...",
+        "…",
+    }
+)
+
 
 # Only suppress when the ENTIRE text (stripped, lowered) IS one of these tokens.
 def is_valid_text(text: str) -> bool:
@@ -64,12 +70,12 @@ def is_valid_text(text: str) -> bool:
 class ClawMessage:
     """Represents a single chat.final event received from OpenClaw."""
 
-    msg_id: str          # Client-generated request UUID (chat.send id)
-    seq: int             # Sequence number from OpenClaw payload
-    text: str            # Extracted plain text
-    state: str           # "final" | "partial" | etc.
-    ts: float            # Unix timestamp when received (time.time())
-    media_paths: list    # Container-side paths from mediaUrls/mediaUrl (Route B)
+    msg_id: str  # Client-generated request UUID (chat.send id)
+    seq: int  # Sequence number from OpenClaw payload
+    text: str  # Extracted plain text
+    state: str  # "final" | "partial" | etc.
+    ts: float  # Unix timestamp when received (time.time())
+    media_paths: list  # Container-side paths from mediaUrls/mediaUrl (Route B)
 
 
 class ClawAggregator:
@@ -89,11 +95,11 @@ class ClawAggregator:
 
     def __init__(self, debounce_ms: int = 400) -> None:
         self.debounce_ms = debounce_ms
-        self.on_final: Optional[Callable[[ClawMessage], Awaitable[None]]] = None
+        self.on_final: Callable[[ClawMessage], Awaitable[None]] | None = None
 
         # Per msg_id buffers and debounce tasks
-        self._buffers: Dict[str, List[ClawMessage]] = {}
-        self._tasks: Dict[str, asyncio.Task] = {}
+        self._buffers: dict[str, list[ClawMessage]] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
 
         self._log = logger.bind(component="ClawAggregator")
 
@@ -159,6 +165,7 @@ class ClawAggregator:
             return
 
         import time as _time
+
         aggregation_latency_ms = round((_time.time() - min(m.ts for m in messages)) * 1000)
         self._log.info(
             "claw_selected_final",
@@ -186,7 +193,7 @@ class ClawAggregator:
                 exc_info=True,
             )
 
-    def _select_best(self, messages: List[ClawMessage]) -> Optional[ClawMessage]:
+    def _select_best(self, messages: list[ClawMessage]) -> ClawMessage | None:
         """
         Pick the best final message from the buffer:
           1. Filter to state == "final"
