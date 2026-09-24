@@ -4,19 +4,34 @@ ClawMux — Mapping Storage.
 Provides lookup:
   provider_user_id + provider → (instance_url, device_credentials)
   external_user_id + provider → provider_user_id + instance info
+  provider_user_id + provider → last known channel (proactive delivery)
 
-Reads from tables: instance, app_user, user_identity, user_instance (join).
+Reads from tables: instance, app_user, user_identity, user_instance, user_channel.
+
+The instance lookups are cached per-process, but every entry is tagged with the
+global `mapping_state.version`. Mutations (bind_user_instance) bump that version
+in the same transaction, so stale entries are reloaded on the next read in ANY
+replica — cache invalidation no longer depends on the writing process.
 """
 
+import time
 import structlog
-from asyncache import cached
-from cachetools import TTLCache
-from typing import Optional
 from dataclasses import dataclass
-from sqlalchemy import select
+from typing import Optional
 
+from sqlalchemy import insert, select, update
+from sqlalchemy.dialects import postgresql, sqlite
+
+from src.core.config import settings
 from src.core.database import async_session_factory
-from src.core.models import AppUser, Instance, UserIdentity, UserInstance
+from src.core.models import (
+    AppUser,
+    Instance,
+    MappingState,
+    UserChannel,
+    UserIdentity,
+    UserInstance,
+)
 
 logger = structlog.get_logger(__name__)
 DEFAULT_PROVIDER = "mattermost"
@@ -29,8 +44,7 @@ SUPPORTED_PROVIDERS = {
     "teams",
 }
 
-_identity_cache = TTLCache(maxsize=1000, ttl=600)
-_external_id_cache = TTLCache(maxsize=1000, ttl=600)
+_MAX_CACHE_ENTRIES = 1000
 
 
 class InstanceNotFoundError(Exception):
@@ -68,8 +82,16 @@ class InstanceInfo:
     credentials: DeviceCredentials
 
 
+# cache entry: (global mapping version, expiry epoch, value)
+_CacheValue = tuple[int, float, object]
+
+
 class MappingStorage:
     """Reads user → instance mapping from PostgreSQL (3NF schema)."""
+
+    def __init__(self) -> None:
+        self._identity_cache: dict[tuple[str, str], _CacheValue] = {}
+        self._external_id_cache: dict[tuple[str, str], _CacheValue] = {}
 
     @staticmethod
     def _validate_provider(provider: str) -> str:
@@ -78,22 +100,74 @@ class MappingStorage:
             raise UnsupportedProviderError(provider)
         return normalized
 
+    # ── Cache internals ────────────────────────────────────────────
+
+    @staticmethod
+    def _state_upsert(session, *, mode: str):
+        """INSERT ... ON CONFLICT statement for the mapping_state singleton.
+
+        mode: 'bump' — version = version + 1; 'noop' — create only if absent.
+        """
+        table = MappingState.__table__
+        dialect = session.get_bind().dialect.name
+        insert_cls = {
+            "postgresql": postgresql.insert,
+            "sqlite": sqlite.insert,
+        }.get(dialect)
+        if insert_cls is None:
+            raise RuntimeError(f"Unsupported dialect for mapping_state upsert: {dialect}")
+        stmt = insert_cls(table).values(id=1, version=1)
+        if mode == "bump":
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["id"],
+                set_={"version": table.c.version + 1},
+            )
+        else:
+            stmt = stmt.on_conflict_do_nothing(index_elements=["id"])
+        return stmt
+
+    async def _cache_version(self, session) -> int:
+        """Current global mapping-cache version (creates the singleton row lazily)."""
+        version = await session.scalar(
+            select(MappingState.version).where(MappingState.id == 1)
+        )
+        if version is None:
+            await session.execute(self._state_upsert(session, mode="noop"))
+            version = await session.scalar(
+                select(MappingState.version).where(MappingState.id == 1)
+            )
+        return int(version)
+
+    def _cache_get(self, cache: dict, key: tuple, version: int) -> Optional[object]:
+        entry = cache.get(key)
+        if entry is None:
+            return None
+        cached_version, expires_at, value = entry
+        if time.monotonic() > expires_at or cached_version != version:
+            cache.pop(key, None)
+            return None
+        return value
+
+    def _cache_put(self, cache: dict, key: tuple, version: int, value: object) -> None:
+        if len(cache) >= _MAX_CACHE_ENTRIES:
+            cache.clear()
+        cache[key] = (version, time.monotonic() + settings.mapping_cache_ttl_sec, value)
+
+    async def _bump_version(self, session) -> None:
+        """Atomically increment the global cache version inside the caller's transaction."""
+        await session.execute(self._state_upsert(session, mode="bump"))
+
+    # ── Lookups ────────────────────────────────────────────────────
+
     async def get_instance(self, user_id: str) -> InstanceInfo:
         """
         Get instance info for Mattermost user ID (current default provider).
-
-        Args:
-            user_id: Mattermost user ID.
-
-        Returns:
-            InstanceInfo with URL and device credentials.
 
         Raises:
             InstanceNotFoundError: if no active assignment exists.
         """
         return await self.get_instance_by_identity(DEFAULT_PROVIDER, user_id)
 
-    @cached(cache=_identity_cache)
     async def get_instance_by_identity(
         self,
         provider: str,
@@ -103,7 +177,13 @@ class MappingStorage:
         Get OpenClaw instance by channel identity (provider + provider_user_id).
         """
         provider = self._validate_provider(provider)
+        key = (provider, provider_user_id)
         async with async_session_factory() as session:
+            version = await self._cache_version(session)
+            cached = self._cache_get(self._identity_cache, key, version)
+            if cached is not None:
+                return cached  # type: ignore[return-value]
+
             stmt = (
                 select(Instance)
                 .join(UserInstance, UserInstance.instance_uuid == Instance.instance_uuid)
@@ -128,7 +208,7 @@ class MappingStorage:
                 provider_user_id=provider_user_id,
                 instance_url=instance.instance_url,
             )
-            return InstanceInfo(
+            info = InstanceInfo(
                 instance_url=instance.instance_url,
                 credentials=DeviceCredentials(
                     device_id=instance.device_id,
@@ -138,8 +218,9 @@ class MappingStorage:
                     gateway_token=instance.gateway_token,
                 ),
             )
+            self._cache_put(self._identity_cache, key, version, info)
+            return info
 
-    @cached(cache=_external_id_cache)
     async def get_instance_by_external_id(
         self,
         external_user_id: str,
@@ -148,18 +229,17 @@ class MappingStorage:
         """
         Resolve provider user ID + instance by external user ID.
 
-        Args:
-            external_user_id: External user identifier.
-            provider: Identity provider (currently: mattermost).
-
-        Returns:
-            Tuple of (provider_user_id, InstanceInfo).
-
         Raises:
             InstanceNotFoundError: if no mapping exists.
         """
         provider = self._validate_provider(provider)
+        key = (external_user_id, provider)
         async with async_session_factory() as session:
+            version = await self._cache_version(session)
+            cached = self._cache_get(self._external_id_cache, key, version)
+            if cached is not None:
+                return cached  # type: ignore[return-value]
+
             stmt = (
                 select(AppUser, UserIdentity.provider_user_id, Instance)
                 .join(UserIdentity, UserIdentity.user_id == AppUser.id)
@@ -189,29 +269,91 @@ class MappingStorage:
                 provider_user_id=provider_user_id,
                 instance_url=instance.instance_url,
             )
-            return provider_user_id, InstanceInfo(
-                instance_url=instance.instance_url,
-                credentials=DeviceCredentials(
-                    device_id=instance.device_id,
-                    public_key_b64=instance.public_key_b64,
-                    private_key_b64=instance.private_key_b64,
-                    device_token=instance.device_token,
-                    gateway_token=instance.gateway_token,
+            value = (
+                provider_user_id,
+                InstanceInfo(
+                    instance_url=instance.instance_url,
+                    credentials=DeviceCredentials(
+                        device_id=instance.device_id,
+                        public_key_b64=instance.public_key_b64,
+                        private_key_b64=instance.private_key_b64,
+                        device_token=instance.device_token,
+                        gateway_token=instance.gateway_token,
+                    ),
                 ),
             )
+            self._cache_put(self._external_id_cache, key, version, value)
+            return value
+
+    # ── Cache invalidation ─────────────────────────────────────────
 
     def invalidate_identity_cache(self) -> None:
-        """Clear cached identity lookups after a mapping change."""
-        _identity_cache.clear()
+        """Clear cached identity lookups (local process only)."""
+        self._identity_cache.clear()
 
     def invalidate_external_id_cache(self) -> None:
-        """Clear cached external_id lookups after a mapping change."""
-        _external_id_cache.clear()
+        """Clear cached external_id lookups (local process only)."""
+        self._external_id_cache.clear()
 
     def invalidate_cache(self) -> None:
         """Clear all internal caches."""
         self.invalidate_identity_cache()
         self.invalidate_external_id_cache()
+
+    async def reload_cache_version(self) -> int:
+        """
+        Re-read the global version and drop entries produced by an older one.
+        Used by POST /api/v1/mappings/reload after external DB edits.
+        """
+        async with async_session_factory() as session:
+            version = await self._cache_version(session)
+        for cache in (self._identity_cache, self._external_id_cache):
+            for key in [k for k, (v, _, _) in cache.items() if v != version]:
+                cache.pop(key, None)
+        return version
+
+    # ── Channel bookkeeping (proactive delivery) ───────────────────
+
+    async def remember_channel(
+        self,
+        provider: str,
+        provider_user_id: str,
+        channel_id: str,
+    ) -> None:
+        """Persist the last known channel for a provider identity (upsert)."""
+        provider = self._validate_provider(provider)
+        async with async_session_factory() as session:
+            async with session.begin():
+                updated = await session.execute(
+                    update(UserChannel)
+                    .where(UserChannel.provider == provider)
+                    .where(UserChannel.provider_user_id == provider_user_id)
+                    .values(channel_id=channel_id)
+                )
+                if updated.rowcount == 0:
+                    await session.execute(
+                        insert(UserChannel).values(
+                            provider=provider,
+                            provider_user_id=provider_user_id,
+                            channel_id=channel_id,
+                        )
+                    )
+
+    async def get_channel(
+        self,
+        provider: str,
+        provider_user_id: str,
+    ) -> Optional[str]:
+        """Last known channel for a provider identity, or None."""
+        provider = self._validate_provider(provider)
+        async with async_session_factory() as session:
+            return await session.scalar(
+                select(UserChannel.channel_id)
+                .where(UserChannel.provider == provider)
+                .where(UserChannel.provider_user_id == provider_user_id)
+            )
+
+    # ── Mutations ──────────────────────────────────────────────────
 
     async def bind_user_instance(
         self,
@@ -225,7 +367,7 @@ class MappingStorage:
     ) -> InstanceInfo:
         """
         Create or update AppUser, UserIdentity, Instance, and UserInstance in 3NF DB schema.
-        Invalidates cache upon success.
+        Bumps the global cache version so every replica reloads on next read.
         """
         provider = self._validate_provider(provider)
         app_user_id = f"{provider}:{provider_user_id}"
@@ -300,6 +442,11 @@ class MappingStorage:
                 else:
                     ui.instance_uuid = instance_uuid
 
+                # 5. Bump the global cache version (same transaction)
+                await self._bump_version(session)
+
+        # Our own cached entries are now stale by definition; other replicas
+        # detect the version mismatch on their next read.
         self.invalidate_cache()
         logger.info(
             "user_instance_bound_successfully",

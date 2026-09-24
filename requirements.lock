@@ -3,7 +3,6 @@ aiosqlite==0.21.0
 alembic==1.15.2
 annotated-types==0.7.0
 anyio==4.13.0
-asyncache==0.3.1
 asyncpg==0.30.0
 cachetools==5.5.2
 certifi==2026.4.22

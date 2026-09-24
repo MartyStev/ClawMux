@@ -31,6 +31,7 @@ def test_reload_mappings_success(monkeypatch):
     app = FastAPI()
     app.include_router(mapping_router)
     mapping = MagicMock()
+    mapping.reload_cache_version = AsyncMock(return_value=7)
     app.state.mapping = mapping
     client = TestClient(app)
 
@@ -39,7 +40,7 @@ def test_reload_mappings_success(monkeypatch):
     data = resp.json()
     assert data["status"] == "ok"
     assert data["message"] == "mapping cache invalidated"
-    mapping.invalidate_cache.assert_called_once()
+    mapping.reload_cache_version.assert_awaited_once()
 
 
 def test_health_liveness():

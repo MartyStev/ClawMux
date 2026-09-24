@@ -31,7 +31,6 @@ prometheus-client==0.22.1
 structlog==25.4.0
 httpx==0.28.1
 aiofiles==25.1.0
-asyncache==0.3.1
 cachetools==5.5.2
 pytest==8.3.5
 aiosqlite==0.21.0  # tests only (real-DB crypto tests)

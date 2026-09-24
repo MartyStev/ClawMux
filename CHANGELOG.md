@@ -4,6 +4,16 @@ All notable changes to ClawMux will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Router state moved to the database**: last-known channels are persisted in a
+  new `user_channel` table (proactive delivery now survives restarts and works
+  across replicas), and mapping caches are validated against a global
+  `mapping_state.version` bumped atomically on every binding — cross-process
+  cache invalidation no longer requires the in-process-only
+  `POST /api/v1/mappings/reload` (it now just re-reads the version). Adds
+  Alembic migration `002`, `MAPPING_CACHE_TTL_SEC` setting; drops the `asyncache`
+  dependency.
+
 ### Security
 - **Teams webhook**: inbound activities now require a valid Bot Framework JWT (signature via Microsoft JWKS, audience, issuer, expiry) and the activity `serviceUrl` must match an HTTPS host whitelist — closes the unauthenticated-webhook and Bearer-token SSRF exfiltration issues.
 - **Bitrix24 webhook**: `POST /api/v1/bitrix/event` requires the incoming-webhook secret (`BITRIX_INBOUND_SECRET`); endpoint is disabled when the secret is not configured.

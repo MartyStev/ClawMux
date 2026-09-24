@@ -6,12 +6,24 @@ Tables:
   app_user       — canonical user inside the router
   user_identity  — user identity for a specific provider
   user_instance  — active user binding to an instance (1:1)
+  user_channel   — last known channel per provider identity (proactive delivery)
+  mapping_state  — global cache-version counter for cross-replica cache busting
 """
 
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 from src.core.crypto import EncryptedText
@@ -168,3 +180,38 @@ class UserInstance(Base):
     # ── Relations ─────────────────────────────────────────────────────────────
     instance: Instance = relationship("Instance", back_populates="assignment")
     user: AppUser = relationship("AppUser", back_populates="assignment")
+
+
+class UserChannel(Base):
+    """
+    Last known channel for a provider identity (composite PK).
+
+    Persisted so proactive delivery survives restarts and works across replicas.
+    """
+
+    __tablename__ = "user_channel"
+
+    provider: str = Column(String(32), primary_key=True)
+    provider_user_id: str = Column(String(128), primary_key=True)
+    channel_id: str = Column(String(128), nullable=False)
+    updated_at: datetime = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class MappingState(Base):
+    """
+    Singleton row (id=1) holding the global mapping-cache version.
+
+    Every mapping mutation bumps it; readers compare it against the version
+    their cached entry was produced with and reload on mismatch — so cache
+    invalidation works across processes/replicas, not just locally.
+    """
+
+    __tablename__ = "mapping_state"
+
+    id: int = Column(Integer, primary_key=True)
+    version: int = Column(BigInteger, nullable=False, server_default="1")
+    updated_at: datetime = Column(
+        DateTime(timezone=True), server_default=func.now(),
+    )

@@ -29,9 +29,15 @@ OpenClaw instances (one per user mapping)
 
 ### MappingStorage
 
-- Stores `app_user`, `user_identity`, and `user_instance` entries in PostgreSQL.
+- Stores `app_user`, `user_identity`, `user_instance`, and `user_channel` entries in PostgreSQL.
 - Ensures each external user is mapped to only one OpenClaw instance.
-- Supports cache invalidation and TTL-aware mapping lookup.
+- Instance lookups are cached per-process but version-checked against the
+  `mapping_state` singleton row: every mutation bumps the global version in the
+  same transaction, so stale entries are reloaded in any replica immediately.
+  `MAPPING_CACHE_TTL_SEC` only bounds staleness of direct external DB edits
+  (also bustable via `POST /api/v1/mappings/reload`).
+- Persists the last known channel per identity (`remember_channel` / `get_channel`),
+  so proactive delivery survives restarts and works across replicas.
 
 ### WSConnectionManager
 

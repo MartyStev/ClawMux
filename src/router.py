@@ -106,7 +106,9 @@ class Router:
         self.file_manager = FileManager(http_client=mm_http) if mm_http else None
 
         self.provisioner = InstanceProvisioner(mapping=self.mapping)
-        # Last known channel per identity key — used for proactive delivery.
+        # Fast-path cache for last known channel per identity key — the source
+        # of truth is the user_channel table (survives restarts, shared across
+        # replicas), this dict only avoids a DB read on the proactive path.
         self._user_channels: Dict[str, str] = {}
         # Dify fallback — active only when DIFY_API_KEY is configured
         self._dify: Optional[DifyClient] = (
@@ -166,7 +168,9 @@ class Router:
         )
 
         # Always update channel mapping so proactive messages know where to go
-        self._user_channels[identity_key] = event.channel_id
+        await self._remember_channel(
+            identity_key, event.provider, event.user_id, event.channel_id
+        )
 
         # Use cached InstanceInfo if WS connection already exists — avoids a
         # DB round-trip on every message for connected users.
@@ -361,6 +365,24 @@ class Router:
             typing_task.cancel()
             request_duration.observe(time.monotonic() - _t_start)
 
+    async def _remember_channel(
+        self, identity_key: str, provider: str, provider_user_id: str, channel_id: str
+    ) -> None:
+        """Cache the last known channel locally and persist it to the DB.
+
+        A DB failure must never break message routing, so it is only logged.
+        """
+        self._user_channels[identity_key] = channel_id
+        try:
+            await self.mapping.remember_channel(provider, provider_user_id, channel_id)
+        except Exception as e:
+            logger.warning(
+                "channel_persist_failed",
+                provider=provider,
+                user_id=identity_key,
+                error=str(e),
+            )
+
     async def _typing_loop(self, adapter: Any, channel_id: str, parent_id: str = "") -> None:
         """Send 'typing...' every 4s until cancelled."""
         try:
@@ -460,17 +482,29 @@ class Router:
         provider_user_id: str,
         provider: str = DEFAULT_PROVIDER,
     ) -> str:
-        """Get the user's last known channel, or create a DM channel."""
+        """Get the user's last known channel (local cache → DB), or create a DM."""
         channel_id = self._user_channels.get(identity_key)
         if not channel_id:
-            adapter = self.get_adapter(provider)
-            if adapter:
-                channel_id = await adapter.get_or_create_dm_channel(provider_user_id)
-                if channel_id:
-                    self._user_channels[identity_key] = channel_id
-            else:
-                logger.warning("provider_delivery_not_supported", provider=provider)
-                return ""
+            try:
+                channel_id = await self.mapping.get_channel(provider, provider_user_id)
+            except Exception as e:
+                logger.warning(
+                    "channel_lookup_failed",
+                    provider=provider,
+                    user_id=identity_key,
+                    error=str(e),
+                )
+            if channel_id:
+                self._user_channels[identity_key] = channel_id
+                return channel_id
+
+        adapter = self.get_adapter(provider)
+        if not adapter:
+            logger.warning("provider_delivery_not_supported", provider=provider)
+            return ""
+        channel_id = await adapter.get_or_create_dm_channel(provider_user_id)
+        if channel_id:
+            await self._remember_channel(identity_key, provider, provider_user_id, channel_id)
         return channel_id or ""
 
     async def trigger_message(

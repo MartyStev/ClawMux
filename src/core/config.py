@@ -158,6 +158,14 @@ class Settings(BaseSettings):
         default=300,
         description="Timeout for waiting on a chat.final response from OpenClaw (seconds)",
     )
+    mapping_cache_ttl_sec: int = Field(
+        default=300,
+        description=(
+            "TTL of the in-process mapping caches. Entries are also version-checked "
+            "against mapping_state in the DB, so mutations in any replica are "
+            "visible immediately; TTL only bounds staleness of external DB edits."
+        ),
+    )
     claw_debounce_ms: int = Field(
         default=150,
         description="Debounce window (ms) for ClawAggregator — wait this long after last chat.final before picking the best message",

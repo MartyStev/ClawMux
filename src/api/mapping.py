@@ -41,8 +41,8 @@ async def reload_mappings(
 
     mapping = getattr(request.app.state, "mapping", None)
     if mapping is not None:
-        mapping.invalidate_cache()
-        logger.info("mapping_cache_invalidated")
+        version = await mapping.reload_cache_version()
+        logger.info("mapping_cache_invalidated", mapping_version=version)
 
     return ReloadMappingResponse(
         status="ok",

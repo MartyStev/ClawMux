@@ -16,17 +16,9 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.pool import StaticPool
-from sqlalchemy.sql.functions import now
 
 from src.core.config import settings
 from src.core.crypto import PREFIX, encrypt_secret, is_encrypted
-
-
-@compiles(now, "sqlite")
-def _compile_now_sqlite(element, compiler, **kw):  # noqa: ANN001, ARG001
-    return "CURRENT_TIMESTAMP"
 
 
 # ── Teams: JWT verification ─────────────────────────────────────────
@@ -317,35 +309,6 @@ def test_mm_action_forwards_with_query_secret(monkeypatch):
 # ── Credential encryption at rest (real SQLite database) ────────────
 
 
-@pytest.fixture()
-def sqlite_session_factory(monkeypatch, request):
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-    import src.services.mapping as mapping_module
-    from src.core.models import Base
-
-    if request.param is not None:
-        monkeypatch.setattr(settings, "credential_encryption_key", request.param)
-
-    engine = create_async_engine(
-        "sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
-    )
-
-    async def _create():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-    asyncio.run(_create())
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    monkeypatch.setattr(mapping_module, "async_session_factory", factory)
-    mapping_module._identity_cache.clear()
-    mapping_module._external_id_cache.clear()
-    yield factory
-    mapping_module._identity_cache.clear()
-    mapping_module._external_id_cache.clear()
-    asyncio.run(engine.dispose())
-
-
 def _creds():
     from src.services.mapping import DeviceCredentials
 
@@ -358,8 +321,7 @@ def _creds():
     )
 
 
-@pytest.mark.parametrize("sqlite_session_factory", ["dGhpcy1pcy1ub3QtYS1mZXJuZXQta2V5ISEhPQ=="], indirect=True)
-def test_credentials_encrypted_at_rest(sqlite_session_factory, monkeypatch):
+def test_credentials_encrypted_at_rest(sqlite_db, monkeypatch):
     # A real Fernet key: generate one for the test
     from cryptography.fernet import Fernet
 
@@ -381,7 +343,7 @@ def test_credentials_encrypted_at_rest(sqlite_session_factory, monkeypatch):
     )
 
     async def _raw_values():
-        async with sqlite_session_factory() as session:
+        async with sqlite_db() as session:
             row = (
                 await session.execute(
                     text(
