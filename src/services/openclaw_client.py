@@ -267,18 +267,23 @@ class OpenClawClient:
         message: str,
         session_key: str = "agent:main:main",
         on_stream: Optional[Callable[[str], Awaitable[None]]] = None,
+        idempotency_key: Optional[str] = None,
     ) -> tuple[str, list[str]]:
         """
         Send a chat message. Returns a tuple of (response_text, media_paths).
         media_paths is a list of container-side file paths from mediaUrls (Route B).
         Blocks until chat.final arrives (or timeout).
         Thread-safe via _send_lock — one message at a time per client.
+
+        Pass the same idempotency_key when retrying a logical send after a
+        disconnect so OpenClaw deduplicates instead of processing twice.
         """
         if not self.is_connected:
             raise OpenClawConnectionError("Not connected. Call connect() first.")
 
         async with self._send_lock:
             msg_id = str(uuid.uuid4())
+            idempotency_key = idempotency_key or str(uuid.uuid4())
             self._active_msg_id = msg_id
             # Fresh Future per request — prevents stale responses from a
             # previous timed-out call from being delivered to this call.
@@ -296,7 +301,7 @@ class OpenClawClient:
                         "sessionKey": session_key,
                         "message": message,
                         "deliver": True,
-                        "idempotencyKey": str(uuid.uuid4()),
+                        "idempotencyKey": idempotency_key,
                     },
                 }))
 

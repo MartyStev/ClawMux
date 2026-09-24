@@ -12,6 +12,7 @@ Key changes vs v1:
 
 import asyncio
 import time
+import uuid
 from typing import Awaitable, Callable, Dict, Optional
 
 import structlog
@@ -45,6 +46,9 @@ class WSConnectionManager:
         self._on_proactive = on_proactive
         self._clients: Dict[str, OpenClawClient] = {}
         self._locks: Dict[str, asyncio.Lock] = {}
+        # Serializes whole logical sends (send + reconnect-retry) per user,
+        # so concurrent sends can't race into double reconnects or interleave.
+        self._send_locks: Dict[str, asyncio.Lock] = {}
         self._user_info: Dict[str, InstanceInfo] = {}  # stored for reconnect
         self._guardian_tasks: Dict[str, asyncio.Task] = {}
         self._last_active: Dict[str, float] = {}  # user_id → last message timestamp
@@ -60,6 +64,11 @@ class WSConnectionManager:
         if user_id not in self._locks:
             self._locks[user_id] = asyncio.Lock()
         return self._locks[user_id]
+
+    def _get_send_lock(self, user_id: str) -> asyncio.Lock:
+        if user_id not in self._send_locks:
+            self._send_locks[user_id] = asyncio.Lock()
+        return self._send_locks[user_id]
 
     def get_cached_info(self, user_id: str) -> Optional[InstanceInfo]:
         """Return cached InstanceInfo if we already have a connection for this user."""
@@ -219,17 +228,34 @@ class WSConnectionManager:
         Send a message to user's OpenClaw instance and get the response.
         Returns a tuple of (response_text, media_paths).
         Handles reconnection if the WS drops mid-flight.
+
+        One logical send = one idempotencyKey reused across the retry, so a
+        disconnect after OpenClaw already accepted the message cannot cause
+        duplicate processing.
         """
         self._last_active[user_id] = time.time()  # track activity for idle cleanup
-        client = await self.get_or_create(user_id, info)
+        idempotency_key = str(uuid.uuid4())
 
-        try:
-            return await client.send_message(message, session_key=session_key, on_stream=on_stream)
-        except (OpenClawConnectionError, Exception) as e:
-            logger.warning("send_failed_reconnecting", user_id=user_id, error=str(e))
-            await client.close()
+        async with self._get_send_lock(user_id):
             client = await self.get_or_create(user_id, info)
-            return await client.send_message(message, session_key=session_key, on_stream=on_stream)
+
+            try:
+                return await client.send_message(
+                    message,
+                    session_key=session_key,
+                    on_stream=on_stream,
+                    idempotency_key=idempotency_key,
+                )
+            except Exception as e:
+                logger.warning("send_failed_reconnecting", user_id=user_id, error=str(e))
+                await client.close()
+                client = await self.get_or_create(user_id, info)
+                return await client.send_message(
+                    message,
+                    session_key=session_key,
+                    on_stream=on_stream,
+                    idempotency_key=idempotency_key,
+                )
 
     async def close_connection(self, user_id: str) -> None:
         """Close and remove connection for a specific user."""
@@ -251,6 +277,7 @@ class WSConnectionManager:
                 ws_active_connections.set(len(self._clients))
                 logger.info("connection_removed", user_id=user_id)
             self._locks.pop(user_id, None)
+            self._send_locks.pop(user_id, None)
 
     @property
     def active_count(self) -> int:
@@ -314,4 +341,5 @@ class WSConnectionManager:
                 await client.close()
 
         self._locks.clear()
+        self._send_locks.clear()
         logger.info("all_connections_closed", count=len(user_ids))

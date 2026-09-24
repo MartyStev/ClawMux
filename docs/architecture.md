@@ -43,6 +43,8 @@ OpenClaw instances (one per user mapping)
 
 - Maintains persistent WebSocket connections to OpenClaw instances.
 - Reconnects automatically on failure and drains idle connections.
+- One `idempotencyKey` per logical send (reused on reconnect-retry) and
+  per-user send serialization prevent duplicate message processing.
 - Streams inbound OpenClaw events back into Mattermost via the router.
 
 ### FileManager

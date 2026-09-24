@@ -4,6 +4,13 @@ All notable changes to ClawMux will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Send idempotency**: a WS disconnect mid-request used to retry `chat.send`
+  with a fresh `idempotencyKey`, so OpenClaw could process the same message
+  twice. Each logical send now gets one key reused across the retry, and sends
+  to the same user are serialized per connection (no more reconnect stampedes
+  from concurrent sends).
+
 ### Changed
 - **Router state moved to the database**: last-known channels are persisted in a
   new `user_channel` table (proactive delivery now survives restarts and works
