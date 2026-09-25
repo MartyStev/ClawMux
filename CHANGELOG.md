@@ -4,10 +4,25 @@ All notable changes to ClawMux will be documented in this file.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-09-25
+
+### Added
+- **CI quality gate**: `pyproject.toml` configures ruff (lint + format,
+  rule sets E4/E7/E9/F/I/UP/B), mypy (`src` only, tests exempt), and a
+  pytest coverage floor (`fail_under = 48`). The GitHub Actions workflow runs
+  ruff, mypy, coverage-gated tests and a Docker image build;
+  `requirements-dev.txt` pins the tooling versions. SQLAlchemy models migrated
+  to `Mapped[]`/`mapped_column`.
+- Initial open source readiness files: `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, and GitHub templates.
+- `requirements.lock` for deterministic dependency installs.
+- GitHub Actions CI workflow for automated test runs.
+- `docs/deployment.md` and `docs/architecture.md` for deployment and architecture guidance.
+- `CODEOWNERS` for automated maintainers review.
+
 ### Changed
-- **Version bumped to 4.0.0-dev** in the FastAPI app metadata (`src/main.py`),
-  matching the unreleased v4.0.0 work (multi-channel, provisioning, DB state,
-  security hardening) accumulated in this changelog's Unreleased section.
+- **Version 4.0.0**: this release bundles the multi-channel router work since
+  v3.0.0 — credential encryption, DB-backed state, reliability and the CI
+  quality gate (details below).
 - **Deployment guide expanded**: real environment-variable list, a table of
   required secrets (`API_TOKEN`, `CREDENTIAL_ENCRYPTION_KEY`,
   `BITRIX_INBOUND_SECRET`, `MM_ACTION_SHARED_SECRET`) with generation
@@ -15,17 +30,23 @@ All notable changes to ClawMux will be documented in this file.
   Alembic migrations on container start, and liveness/readiness endpoints.
   Verified end-to-end against a real PostgreSQL 16 (migrations 001→002,
   plaintext→Fernet encryption, idempotent re-run, ORM decrypt round-trip).
-
-### Added
-- **CI quality gate**: `pyproject.toml` now configures ruff (lint + format,
-  rule sets E4/E7/E9/F/I/UP/B), mypy (`src` only, tests exempt), and a
-  pytest coverage floor (`fail_under = 48`, currently ~51%). The GitHub
-  Actions workflow runs ruff, mypy, coverage-gated tests and a Docker image
-  build; `requirements-dev.txt` pins the tooling versions. SQLAlchemy models
-  were migrated to `Mapped[]`/`mapped_column` and assorted type/latent bugs
-  fixed (Telegram/VK-Teams payload typing, Bitrix `Any` import, uncalled
-  `None` proactive handler in cron events, dialect-specific upsert typing) to
-  get the type checker to zero errors.
+- **Teams adapter**: the conversation→serviceUrl map is now LRU-bounded
+  (`OrderedDict`, cap 10000) so a long-lived bot cannot grow it unboundedly.
+- **WSConnectionManager**: the idle-cleanup loop is started via an explicit
+  `await ws_manager.start()` from the app lifespan instead of spawning a task
+  in `__init__` via the deprecated `get_event_loop()`.
+- **ClawAggregator**: the minimum "real answer" text length is now the
+  `CLAW_MIN_VALID_TEXT_LEN` setting (default 5) instead of a hardcoded value.
+- **Router state moved to the database**: last-known channels are persisted in a
+  new `user_channel` table (proactive delivery now survives restarts and works
+  across replicas), and mapping caches are validated against a global
+  `mapping_state.version` bumped atomically on every binding — cross-process
+  cache invalidation no longer requires the in-process-only
+  `POST /api/v1/mappings/reload` (it now just re-reads the version). Adds
+  Alembic migration `002`, `MAPPING_CACHE_TTL_SEC` setting; drops the `asyncache`
+  dependency.
+- Updated README with Docker and local quick start workflows.
+- Improved OpenClaw and multi-user isolation documentation.
 
 ### Fixed
 - **Send idempotency**: a WS disconnect mid-request used to retry `chat.send`
@@ -43,23 +64,9 @@ All notable changes to ClawMux will be documented in this file.
 - **Readiness probe fail-closed**: `/health/ready` no longer reports
   "mattermost: ok" when the adapter cannot report `is_ws_connected`
   (the `getattr` default was `True`).
-
-### Changed
-- **Teams adapter**: the conversation→serviceUrl map is now LRU-bounded
-  (`OrderedDict`, cap 10000) so a long-lived bot cannot grow it unboundedly.
-- **WSConnectionManager**: the idle-cleanup loop is started via an explicit
-  `await ws_manager.start()` from the app lifespan instead of spawning a task
-  in `__init__` via the deprecated `get_event_loop()`.
-- **ClawAggregator**: the minimum "real answer" text length is now the
-  `CLAW_MIN_VALID_TEXT_LEN` setting (default 5) instead of a hardcoded value.
-- **Router state moved to the database**: last-known channels are persisted in a
-  new `user_channel` table (proactive delivery now survives restarts and works
-  across replicas), and mapping caches are validated against a global
-  `mapping_state.version` bumped atomically on every binding — cross-process
-  cache invalidation no longer requires the in-process-only
-  `POST /api/v1/mappings/reload` (it now just re-reads the version). Adds
-  Alembic migration `002`, `MAPPING_CACHE_TTL_SEC` setting; drops the `asyncache`
-  dependency.
+- **Cron proactive handler**: a missing `None` guard on the optional
+  `on_proactive` callback in the Teams `cron` event path (found by mypy).
+- Replaced localized thinking phrases with English equivalents for broader audience.
 
 ### Security
 - **Teams webhook**: inbound activities now require a valid Bot Framework JWT (signature via Microsoft JWKS, audience, issuer, expiry) and the activity `serviceUrl` must match an HTTPS host whitelist — closes the unauthenticated-webhook and Bearer-token SSRF exfiltration issues.
@@ -67,17 +74,3 @@ All notable changes to ClawMux will be documented in this file.
 - **Mattermost action proxy**: `POST /api/v1/mm/action` requires a shared secret (`MM_ACTION_SHARED_SECRET`) via header or callback-URL query param; endpoint is disabled when not configured.
 - **Credentials at rest**: OpenClaw `private_key_b64`, `device_token` and `gateway_token` are now Fernet-encrypted in PostgreSQL (`CREDENTIAL_ENCRYPTION_KEY`), with backward-compatible plaintext reads and a one-shot `scripts/encrypt_existing_credentials.py` migration.
 - Added `PyJWT[crypto]` and (test-only) `aiosqlite` dependencies.
-
-### Added
-- Initial open source readiness files: `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, and GitHub templates.
-- `requirements.lock` for deterministic dependency installs.
-- GitHub Actions CI workflow for automated test runs.
-- `docs/deployment.md` and `docs/architecture.md` for deployment and architecture guidance.
-- `CODEOWNERS` for automated maintainers review.
-
-### Changed
-- Updated README with Docker and local quick start workflows.
-- Improved OpenClaw and multi-user isolation documentation.
-
-### Fixed
-- Replaced localized thinking phrases with English equivalents for broader audience.
