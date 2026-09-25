@@ -16,19 +16,59 @@ This will build the service container and start it with the configuration from `
 
 Copy `.env.example` to `.env` and update the values:
 
-- `MATTERMOST_URL`
-- `MATTERMOST_TOKEN`
 - `DATABASE_URL`
-- `OPENCLAW_URL`
-- `DIFY_API_KEY` (optional fallback)
-- `API_TOKEN`
+- `MATTERMOST_URL`, `MATTERMOST_TOKEN`, `MATTERMOST_BOT_USERNAME`
+- `API_TOKEN` — control-plane secret (`X-Api-Token`)
+- `OPENCLAW_CONFIGS_PATH` — host path mounted at `/configs` for workspaces
+
+Optional channels (set `ENABLE_*=true` plus their tokens): Telegram, Slack,
+VK Teams, Bitrix24, Microsoft Teams, Dify fallback. See `.env.example` for
+the full list.
+
+### Required secrets for exposed endpoints
+
+| Variable | Purpose | If empty |
+|---|---|---|
+| `API_TOKEN` | Protects `/api/v1/trigger` and `/api/v1/notify` | endpoints reject all requests |
+| `CREDENTIAL_ENCRYPTION_KEY` | Fernet-encrypts OpenClaw private keys/tokens at rest in PostgreSQL | credentials stored as plaintext (dev only; startup logs a warning) |
+| `BITRIX_INBOUND_SECRET` | Verifies inbound events to `/api/v1/bitrix/event` | endpoint disabled |
+| `MM_ACTION_SHARED_SECRET` | Verifies `/api/v1/mm/action` callbacks from Mattermost | endpoint disabled |
+
+Generate strong values:
+
+```bash
+# Fernet key for credential encryption
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Any of the remaining secrets
+openssl rand -hex 32
+```
+
+If the database already contains instances (plaintext credentials), run the
+one-shot encryption script once after setting `CREDENTIAL_ENCRYPTION_KEY`
+(`--dry-run` first to preview):
+
+```bash
+python scripts/encrypt_existing_credentials.py --dry-run
+python scripts/encrypt_existing_credentials.py
+```
+
+Already-encrypted rows are skipped, so re-running is safe.
+
+### Database migrations
+
+Migrations run automatically on container start (`docker/entrypoint.sh`
+executes `alembic upgrade head` before uvicorn). For local runs execute them
+manually before starting the app. Current schema is at revision `002`
+(`user_channel` + `mapping_state`).
 
 ### Health check
 
 Verify the service is running:
 
 ```bash
-curl http://localhost:8060/health
+curl http://localhost:8060/health          # liveness
+curl http://localhost:8060/health/ready    # readiness (DB + channel adapters)
 ```
 
 ## Local Python deployment

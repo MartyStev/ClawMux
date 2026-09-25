@@ -171,7 +171,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ClawMux",
     description="Multi-channel AI router for OpenClaw instances (Mattermost, Telegram, Bitrix24, Slack, VK Teams, Teams)",
-    version="3.0.0",
+    version="4.0.0-dev",
     lifespan=lifespan,
 )
 

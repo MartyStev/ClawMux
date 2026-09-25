@@ -4,6 +4,18 @@ All notable changes to ClawMux will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Version bumped to 4.0.0-dev** in the FastAPI app metadata (`src/main.py`),
+  matching the unreleased v4.0.0 work (multi-channel, provisioning, DB state,
+  security hardening) accumulated in this changelog's Unreleased section.
+- **Deployment guide expanded**: real environment-variable list, a table of
+  required secrets (`API_TOKEN`, `CREDENTIAL_ENCRYPTION_KEY`,
+  `BITRIX_INBOUND_SECRET`, `MM_ACTION_SHARED_SECRET`) with generation
+  commands, the one-shot credential-encryption migration step, automatic
+  Alembic migrations on container start, and liveness/readiness endpoints.
+  Verified end-to-end against a real PostgreSQL 16 (migrations 001→002,
+  plaintext→Fernet encryption, idempotent re-run, ORM decrypt round-trip).
+
 ### Added
 - **CI quality gate**: `pyproject.toml` now configures ruff (lint + format,
   rule sets E4/E7/E9/F/I/UP/B), mypy (`src` only, tests exempt), and a
