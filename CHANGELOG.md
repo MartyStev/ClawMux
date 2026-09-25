@@ -4,6 +4,18 @@ All notable changes to ClawMux will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+- **Workspace path traversal closed**: `container_path_to_host()` now rejects
+  any agent-controlled path (OpenClaw `mediaUrl(s)`) that normalizes outside
+  `WORKSPACE_BASE_PATH/<uuid>/` or resolves through a symlink to escape the
+  tenant directory — previously `../` segments could exfiltrate other users'
+  workspaces or host files into chat.
+- **Provisioning response validated**: `instance_uuid` returned by the
+  provisioning webhook must be a valid UUID (it becomes a workspace path
+  component) and `instance_url` must use the `ws`/`wss` scheme; the new
+  `PROVISIONING_ALLOWED_INSTANCE_HOSTS` setting (comma-separated, empty = any
+  host) allowlists where device/gateway tokens are sent.
+
 ## [4.0.0] - 2026-09-25
 
 ### Added

@@ -220,6 +220,15 @@ class Settings(BaseSettings):
         default=60,
         description="Maximum seconds to wait for instance auto-provisioning and readiness",
     )
+    provisioning_allowed_instance_hosts: str = Field(
+        default="",
+        description=(
+            "Comma-separated host allowlist for instance_url returned by the provisioning "
+            "webhook (ClawMux sends device/gateway tokens there). Empty = any host "
+            "(ws/wss scheme is always enforced); set it in production, "
+            "e.g. 'openclaw-gw,10.0.3.7,claw.internal'."
+        ),
+    )
 
     # ── Control-Plane API ─────────────────────────────────────────────────────────
     api_token: str = Field(

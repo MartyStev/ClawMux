@@ -60,6 +60,11 @@ def container_path_to_host(container_path: str, uuid: str) -> str:
     Convert an absolute path inside the OpenClaw container to the
     corresponding host path accessible through the shared volume.
 
+    The result is guaranteed to stay inside `{workspace_base_path}/{uuid}/`:
+    the path is taken from agent-controlled replies (mediaUrls), so `..`
+    segments and symlink escapes must not reach another tenant's workspace
+    or a host file. Returns "" when the path is rejected.
+
     Example:
       /home/node/.openclaw/workspace/output/report.xlsx
       → /configs/<UUID>/workspace/output/report.xlsx
@@ -76,7 +81,24 @@ def container_path_to_host(container_path: str, uuid: str) -> str:
         )
         return ""
     relative = container_path[len(openclaw_root) :]  # e.g. workspace/output/report.xlsx
-    return f"{settings.workspace_base_path}/{uuid}/{relative}"
+    base = f"{settings.workspace_base_path}/{uuid}"
+    candidate = os.path.normpath(os.path.join(base, relative))
+
+    # 1) Lexical containment: normpath collapses any "../" traversal.
+    if candidate != base and not candidate.startswith(base + os.sep):
+        log.warning("container_path_escape_rejected", container_path=container_path, uuid=uuid)
+        return ""
+
+    # 2) Symlink containment: resolve what exists on disk (the agent may have
+    #    created a symlink inside its own workspace pointing elsewhere).
+    #    realpath() on non-existing tails simply keeps the lexical path.
+    resolved = os.path.realpath(candidate)
+    resolved_base = os.path.realpath(base)
+    if resolved != resolved_base and not resolved.startswith(resolved_base + os.sep):
+        log.warning("container_path_symlink_rejected", container_path=container_path, uuid=uuid)
+        return ""
+
+    return candidate
 
 
 def build_attachment_context(files: list[DownloadedFile]) -> str:

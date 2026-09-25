@@ -9,6 +9,7 @@ Drivers supported:
 
 import asyncio
 import uuid
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -23,6 +24,32 @@ class ProvisioningError(Exception):
     """Raised when instance provisioning fails or times out."""
 
     pass
+
+
+def _validate_provisioned_target(instance_uuid: str, instance_url: str) -> None:
+    """
+    Sanitize what the provisioning webhook returns before we trust it.
+
+    Both values are attacker-influenced if the orchestrator is compromised:
+    `instance_uuid` becomes a path component under WORKSPACE_BASE_PATH and
+    `instance_url` receives our device/gateway tokens over WS.
+    """
+    try:
+        uuid.UUID(instance_uuid)
+    except ValueError as e:
+        raise ProvisioningError(f"Provisioning returned invalid instance_uuid: {instance_uuid!r}") from e
+
+    parsed = urlparse(instance_url)
+    if parsed.scheme not in ("ws", "wss"):
+        raise ProvisioningError(f"Instance URL scheme not allowed: {parsed.scheme!r} (expected ws/wss)")
+    if not parsed.hostname:
+        raise ProvisioningError("Instance URL has no host component")
+
+    allowed = {h.strip().lower() for h in settings.provisioning_allowed_instance_hosts.split(",") if h.strip()}
+    if allowed and parsed.hostname.lower() not in allowed:
+        raise ProvisioningError(
+            f"Instance URL host {parsed.hostname!r} is not in the PROVISIONING_ALLOWED_INSTANCE_HOSTS allowlist"
+        )
 
 
 class InstanceProvisioner:
@@ -55,6 +82,10 @@ class InstanceProvisioner:
             info, instance_uuid = await self._provision_webhook(provider, user_id)
         else:
             raise ProvisioningError(f"Unsupported provisioning driver: {driver}")
+
+        # Never trust the driver's answer: uuid becomes a path component and
+        # instance_url receives our credentials over WS.
+        _validate_provisioned_target(instance_uuid, info.instance_url)
 
         # Seed default workspace template (AGENTS.md, subagents, mcp, openclaw.json)
         await self._seed_workspace_template(
