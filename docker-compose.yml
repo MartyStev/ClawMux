@@ -98,6 +98,7 @@ services:
 
 networks:
   backend:
+    name: clawmux_backend
     driver: bridge
 
 volumes:

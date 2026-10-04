@@ -408,6 +408,10 @@ class MappingStorage:
                         role=role,
                     )
                     session.add(user)
+                elif user.role is None and role is not None:
+                    # Preserve a deliberate role, but persist the template role
+                    # selected during provisioning for an unassigned user.
+                    user.role = role
 
                 # 3. Upsert UserIdentity
                 stmt_id = select(UserIdentity).where(

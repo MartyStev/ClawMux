@@ -9,8 +9,10 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import select
 
 from src.core.config import settings
+from src.core.models import AppUser
 from src.router import Router
 from src.services.chat_adapter import ProviderRegistry
 from src.services.mapping import DeviceCredentials, MappingStorage
@@ -132,6 +134,32 @@ def test_rebind_bumps_version_and_evicts_other_replica_cache(sqlite_db):
     # s2 must NOT serve its stale cached entry
     info2 = asyncio.run(s2.get_instance_by_identity("telegram", "u1"))
     assert info2.credentials.device_id == "dev-C"
+
+
+def test_bind_populates_missing_role_without_overwriting_existing_role(sqlite_db):
+    async def run() -> tuple[str | None, str | None]:
+        async with sqlite_db() as session:
+            async with session.begin():
+                session.add(AppUser(id="telegram:missing-role", role=None))
+                session.add(AppUser(id="telegram:existing-role", role="curator"))
+
+        storage = MappingStorage()
+        for user, suffix in (("missing-role", "M"), ("existing-role", "E")):
+            await storage.bind_user_instance(
+                provider="telegram",
+                provider_user_id=user,
+                instance_uuid=f"{suffix.lower() * 8}-1111-1111-1111-111111111111",
+                instance_url=f"ws://openclaw-gw-{suffix}:18789/ws",
+                credentials=_creds(suffix),
+                role="sales",
+            )
+
+        async with sqlite_db() as session:
+            rows = await session.execute(select(AppUser).order_by(AppUser.id))
+            roles = {user.id: user.role for user in rows.scalars()}
+        return roles["telegram:missing-role"], roles["telegram:existing-role"]
+
+    assert asyncio.run(run()) == ("sales", "curator")
 
 
 def test_cache_entry_expires_by_ttl(sqlite_db, monkeypatch):

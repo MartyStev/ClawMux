@@ -78,8 +78,10 @@ class InstanceProvisioner:
         driver = settings.provisioning_driver.lower().strip()
         if driver == "mock":
             info, instance_uuid = await self._provision_mock(provider, user_id)
+            role = None
+            workspace_seeded = False
         elif driver == "webhook":
-            info, instance_uuid = await self._provision_webhook(provider, user_id)
+            info, instance_uuid, role, workspace_seeded = await self._provision_webhook(provider, user_id)
         else:
             raise ProvisioningError(f"Unsupported provisioning driver: {driver}")
 
@@ -87,12 +89,14 @@ class InstanceProvisioner:
         # instance_url receives our credentials over WS.
         _validate_provisioned_target(instance_uuid, info.instance_url)
 
-        # Seed default workspace template (AGENTS.md, subagents, mcp, openclaw.json)
-        await self._seed_workspace_template(
-            instance_uuid=instance_uuid,
-            provider=provider,
-            user_id=user_id,
-        )
+        # Preserve a role template already seeded by the orchestrator.
+        # Other webhook implementations still receive the default template.
+        if not workspace_seeded:
+            await self._seed_workspace_template(
+                instance_uuid=instance_uuid,
+                provider=provider,
+                user_id=user_id,
+            )
 
         # Bind the provisioned instance in database mapping
         return await self.mapping.bind_user_instance(
@@ -101,6 +105,7 @@ class InstanceProvisioner:
             instance_uuid=instance_uuid,
             instance_url=info.instance_url,
             credentials=info.credentials,
+            role=role or "user",
         )
 
     async def _provision_mock(
@@ -126,7 +131,7 @@ class InstanceProvisioner:
         self,
         provider: str,
         user_id: str,
-    ) -> tuple[InstanceInfo, str]:
+    ) -> tuple[InstanceInfo, str, str | None, bool]:
         """Call external orchestrator HTTP endpoint to provision a container/pod."""
         if not settings.provisioning_webhook_url:
             raise ProvisioningError("PROVISIONING_WEBHOOK_URL is not configured")
@@ -165,7 +170,12 @@ class InstanceProvisioner:
                     device_token=creds_raw.get("device_token", ""),
                     gateway_token=creds_raw.get("gateway_token", ""),
                 )
-                return InstanceInfo(instance_url=instance_url, credentials=credentials), instance_uuid
+                return (
+                    InstanceInfo(instance_url=instance_url, credentials=credentials),
+                    instance_uuid,
+                    data.get("role"),
+                    data.get("workspace_seeded") is True,
+                )
 
         except Exception as e:
             logger.error("provisioning_webhook_failed", provider=provider, user_id=user_id, error=str(e))

@@ -29,6 +29,7 @@ import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import aiofiles
 import structlog
@@ -222,7 +223,7 @@ class OpenClawClient:
 
             # Step 2: signed connect
             identity = _sign_connect(nonce, self.credentials, self.gateway_token)
-            connect_msg = {
+            connect_msg: dict[str, Any] = {
                 "type": "req",
                 "id": str(uuid.uuid4()),
                 "method": "connect",
@@ -246,7 +247,33 @@ class OpenClawClient:
             raw = await asyncio.wait_for(self._ws.recv(), timeout=10)
             res = json.loads(raw)
             if not res.get("ok"):
-                raise OpenClawConnectionError(f"Connect rejected: {res.get('error', 'unknown')}")
+                error_obj = res.get("error", {})
+                details = error_obj.get("details") if isinstance(error_obj, dict) else None
+                gw_build_id = details.get("gatewayBuildId") if isinstance(details, dict) else None
+                if gw_build_id:
+                    self._log.warning("protocol_mismatch_retry", gateway_build_id=gw_build_id)
+                    await self._ws.close()
+                    self._ws = await websockets.connect(
+                        self.instance_url,
+                        additional_headers={"Origin": origin},
+                        open_timeout=10,
+                        close_timeout=5,
+                    )
+                    raw = await asyncio.wait_for(self._ws.recv(), timeout=10)
+                    data = json.loads(raw)
+                    if data.get("event") != "connect.challenge":
+                        raise OpenClawConnectionError(f"Expected connect.challenge on retry, got: {data.get('event')}")
+                    nonce = data["payload"]["nonce"]
+                    identity = _sign_connect(nonce, self.credentials, self.gateway_token)
+                    identity["client"]["buildId"] = gw_build_id
+                    connect_msg["params"]["client"] = identity["client"]
+                    connect_msg["params"]["device"] = identity["device"]
+                    await self._ws.send(json.dumps(connect_msg))
+                    raw = await asyncio.wait_for(self._ws.recv(), timeout=10)
+                    res = json.loads(raw)
+
+                if not res.get("ok"):
+                    raise OpenClawConnectionError(f"Connect rejected: {res.get('error', 'unknown')}")
 
             self._connected = True
             self._log.info("connected_ok")
@@ -257,10 +284,16 @@ class OpenClawClient:
                 name=f"openclaw-listen-{self.credentials.device_id[:8]}",
             )
 
-        except OpenClawConnectionError:
-            raise
         except Exception as e:
             self._connected = False
+            if self._ws is not None:
+                try:
+                    await self._ws.close()
+                except Exception:
+                    self._log.warning("failed_connection_close_error")
+                self._ws = None
+            if isinstance(e, OpenClawConnectionError):
+                raise
             raise OpenClawConnectionError(f"Connection failed: {e}") from e
 
     async def send_message(
